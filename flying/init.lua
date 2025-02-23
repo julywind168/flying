@@ -4,10 +4,10 @@ local EMPTY_TABEL <const> = {}
 
 local M = {}
 
-local function try(s, fname)
+local function try(s, fname, ...)
     local f = s[fname]
     if f then
-        f(s)
+        f(s, ...)
     end
     return s
 end
@@ -27,8 +27,11 @@ function M.service(s)
     local state = {}
     local message = assert(s.message, "message function not found")
 
-    function s._started()
-        try(state, "started")
+    function s._started(version)
+        if version == 1 then
+            try(state, "init")
+        end
+        try(state, "started", version)
     end
 
     function s._stopped()
@@ -44,7 +47,7 @@ function M.service(s)
         return pack(message(state, table.unpack(unpack(data))))
     end
 
-    return try(setmetatable(state, { __index = s }), "init")
+    return setmetatable(state, { __index = s })
 end
 
 return M

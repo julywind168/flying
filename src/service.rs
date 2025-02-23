@@ -1,32 +1,64 @@
+use std::fs;
+
 use actix::prelude::*;
 use mlua::prelude::*;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct Stop;
 
 #[derive(Message)]
 #[rtype(result = "String")]
 pub struct Call(pub String);
 
 pub struct LuaService {
-    addr : Option<Addr<Self>>,
-    _lua: Lua,
-    serv: LuaTable,
+    addr: Addr<Self>,
+    lua: Lua,
+    file: String,
+    version: u32, // reload or flow times
+    serv: Option<LuaTable>,
+}
+
+impl LuaService {
+    pub fn load(&mut self) {
+        let script = fs::read_to_string(&self.file).unwrap();
+        let loaded = self.lua.load(&script).eval::<LuaTable>();
+        match loaded {
+            Ok(serv) => {
+                let addr = self.addr.clone();
+                let stop = self
+                    .lua
+                    .create_function(move |_, ()| {
+                        addr.do_send(Stop);
+                        Ok(())
+                    })
+                    .unwrap();
+                let mt = serv.metatable().unwrap();
+                mt.set("stop", stop).unwrap();
+                self.serv = Some(serv);
+            }
+            Err(e) => panic!("service {} load error: {}", self.file, e),
+        }
+    }
 }
 
 impl Actor for LuaService {
     type Context = Context<Self>;
 
     fn started(&mut self, _ctx: &mut Self::Context) {
-        let f: LuaFunction = self.serv.get("_started").unwrap();
-        let _ = f.call::<()>(());
+        self.load();
+        let f: LuaFunction = self.serv.as_ref().unwrap().get("_started").unwrap();
+        let _ = f.call::<()>(self.version);
     }
 
     fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
-        let f: LuaFunction = self.serv.get("_stopping").unwrap();
+        let f: LuaFunction = self.serv.as_ref().unwrap().get("_stopping").unwrap();
         let _ = f.call::<()>(());
         Running::Stop
     }
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {
-        let f: LuaFunction = self.serv.get("_stopped").unwrap();
+        let f: LuaFunction = self.serv.as_ref().unwrap().get("_stopped").unwrap();
         let _ = f.call::<()>(());
     }
 }
@@ -35,27 +67,29 @@ impl Handler<Call> for LuaService {
     type Result = String;
 
     fn handle(&mut self, msg: Call, _ctx: &mut Self::Context) -> Self::Result {
-        let f: LuaFunction = self.serv.get("_message").unwrap();
+        let f: LuaFunction = self.serv.as_ref().unwrap().get("_message").unwrap();
         f.call::<String>(msg.0).unwrap()
     }
 }
 
-pub fn new(file: &str) -> Result<Addr<LuaService>, mlua::Error> {
-    let lua = Lua::new();
-    let f = std::fs::read_to_string(file).unwrap();
-    let load_result = lua.load(&f).eval::<LuaTable>();
-    match load_result {
-        Ok(serv) => Ok({
-            let addr = LuaService::create(|ctx| {         
-                let service = LuaService {
-                    addr: Some(ctx.address()),
-                    _lua: lua,
-                    serv,
-                };
-                service
-            });
-            addr
-        }),
-        Err(e) => Err(e),
+impl Handler<Stop> for LuaService {
+    type Result = ();
+
+    fn handle(&mut self, _: Stop, ctx: &mut Context<Self>) {
+        ctx.stop();
     }
+}
+
+pub fn new(file: &str, version: u32) -> Addr<LuaService> {
+    LuaService::create(|ctx| {
+        let lua: Lua = Lua::new();
+        let addr = ctx.address();
+        LuaService {
+            addr,
+            lua,
+            file: file.to_string(),
+            version: version + 1,
+            serv: None,
+        }
+    })
 }

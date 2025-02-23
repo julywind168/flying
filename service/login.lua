@@ -4,14 +4,15 @@ local login = {}
 
 function login:init()
     self.users = {}
+    print("login service init")
 end
 
 function login:started()
     print("login service started")
 end
 
-function login:message(name, ...)
-    print("login service received message:", name, ...)
+function login:message(...)
+    print("login recv message:", ...)
     return true, 123
 end
 
