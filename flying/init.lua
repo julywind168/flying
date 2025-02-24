@@ -2,7 +2,7 @@ local json = require "flying.json"
 
 local EMPTY_TABEL <const> = {}
 
-local M = {}
+local flying = {}
 
 local function try(serv, fname, state, ctx, ...)
     local f = serv[fname]
@@ -22,7 +22,7 @@ local function unpack(data)
     return json.decode(data)
 end
 
-function M.service(serv)
+function flying.service(serv)
     local state = {}
     local context = {}
     assert(serv.message, "message function not found")
@@ -51,4 +51,4 @@ function M.service(serv)
     return context
 end
 
-return M
+return flying

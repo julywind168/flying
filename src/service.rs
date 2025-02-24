@@ -79,9 +79,18 @@ impl Handler<Stop> for LuaService {
     }
 }
 
-pub fn new(file: &str, version: u32) -> Addr<LuaService> {
+pub fn new(file: String, version: u32) -> Addr<LuaService> {
     LuaService::create(|ctx| {
         let lua: Lua = Lua::new();
+        let flying = lua.load(r#"require "flying""#).eval::<LuaTable>().unwrap();
+
+        let newservice = lua.create_function(|_, filename| {
+            let _ = new(filename, 0);
+            Ok(())
+        }).unwrap();
+
+        flying.set("newservice", newservice).unwrap();
+
         let addr = ctx.address();
         LuaService {
             addr,
