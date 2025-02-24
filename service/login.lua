@@ -2,7 +2,7 @@ local flying = require "flying"
 
 local login = {}
 
-function login:init()
+function login:init(ctx)
     self.users = {}
     print("login service init")
 end
@@ -17,11 +17,11 @@ function login:message(ctx, ...)
     return true, 123
 end
 
-function login:stopping()
+function login:stopping(ctx)
     print("login service stopping")
 end
 
-function login:stopped()
+function login:stopped(ctx)
     print("login service stopped")
 end
 
