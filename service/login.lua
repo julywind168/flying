@@ -7,12 +7,13 @@ function login:init()
     print("login service init")
 end
 
-function login:started()
-    print("login service started")
+function login:started(ctx)
+    print(("login service started, version = %d"):format(ctx.version))
 end
 
-function login:message(...)
+function login:message(ctx, ...)
     print("login recv message:", ...)
+    ctx.stop()
     return true, 123
 end
 

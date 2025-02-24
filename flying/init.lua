@@ -4,12 +4,11 @@ local EMPTY_TABEL <const> = {}
 
 local M = {}
 
-local function try(s, fname, ...)
-    local f = s[fname]
+local function try(serv, fname, state, ctx, ...)
+    local f = serv[fname]
     if f then
-        f(s, ...)
+        f(state, ctx, ...)
     end
-    return s
 end
 
 local function pack(...)
@@ -23,31 +22,33 @@ local function unpack(data)
     return json.decode(data)
 end
 
-function M.service(s)
+function M.service(serv)
     local state = {}
-    local message = assert(s.message, "message function not found")
+    local context = {}
+    assert(serv.message, "message function not found")
 
-    function s._started(version)
+    function context._started(version)
+        context.version = version
         if version == 1 then
-            try(state, "init")
+            try(serv, "init", state, context)
         end
-        try(state, "started", version)
+        try(serv, "started", state, context)
     end
 
-    function s._stopped()
-        try(state, "stopped")
+    function context._stopped()
+        try(serv, "stopped", state, context)
     end
 
-    function s._stopping()
-        try(state, "stopping")
+    function context._stopping()
+        try(serv, "stopping", state, context)
     end
 
-    function s._message(data)
+    function context._message(data)
         print("message:", data)
-        return pack(message(state, table.unpack(unpack(data))))
+        return pack(serv.message(state, context, table.unpack(unpack(data))))
     end
 
-    return setmetatable(state, { __index = s })
+    return context
 end
 
 return M

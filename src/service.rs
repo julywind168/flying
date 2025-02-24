@@ -33,8 +33,7 @@ impl LuaService {
                         Ok(())
                     })
                     .unwrap();
-                let mt = serv.metatable().unwrap();
-                mt.set("stop", stop).unwrap();
+                serv.set("stop", stop).unwrap();
                 self.serv = Some(serv);
             }
             Err(e) => panic!("service {} load error: {}", self.file, e),
