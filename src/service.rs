@@ -1,7 +1,9 @@
-use std::fs;
+use std::{fs, sync::Arc};
 
 use actix::prelude::*;
 use mlua::prelude::*;
+
+use crate::node::Node;
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -12,16 +14,17 @@ struct Stop;
 pub struct Call(pub String);
 
 pub struct LuaService {
+    node: Arc<Node>,
     addr: Addr<Self>,
     lua: Lua,
-    file: String,
+    filename: String,
     version: u32, // reload or flow times
     serv: Option<LuaTable>,
 }
 
 impl LuaService {
     pub fn load(&mut self) {
-        let script = fs::read_to_string(&self.file).unwrap();
+        let script = fs::read_to_string(&self.filename).unwrap();
         let loaded = self.lua.load(&script).eval::<LuaTable>();
         match loaded {
             Ok(serv) => {
@@ -36,7 +39,7 @@ impl LuaService {
                 serv.set("stop", stop).unwrap();
                 self.serv = Some(serv);
             }
-            Err(e) => panic!("service {} load error: {}", self.file, e),
+            Err(e) => panic!("service {} load error: {}", self.filename, e),
         }
     }
 }
@@ -79,23 +82,43 @@ impl Handler<Stop> for LuaService {
     }
 }
 
-pub fn new(file: String, version: u32) -> Addr<LuaService> {
+pub fn new(filename: String, node: Arc<Node>, version: u32) -> Addr<LuaService> {
     LuaService::create(|ctx| {
-        let lua: Lua = Lua::new();
-        let flying = lua.load(r#"require "flying""#).eval::<LuaTable>().unwrap();
+        let lua = Lua::new();
+        let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
 
-        let newservice = lua.create_function(|_, filename| {
-            let _ = new(filename, 0);
-            Ok(())
-        }).unwrap();
+        let newservice = {
+            let node = node.clone();
+            lua.create_function(move |_, filename: String| {
+                let _ = new(filename, node.clone(), 0);
+                Ok(())
+            }).unwrap()
+        };
+
+        let setenv = {
+            let node = node.clone();
+            lua.create_function(move |_, (key, value): (String, String)| {
+                node.setenv(&key, value);
+                Ok(())
+            }).unwrap()
+        };
+
+        let getenv = {
+            let node = node.clone();
+            lua.create_function(move |_, key: String| {
+                Ok(node.getenv(&key))
+            }).unwrap()
+        };
 
         flying.set("newservice", newservice).unwrap();
+        flying.set("setenv", setenv).unwrap();
+        flying.set("getenv", getenv).unwrap();
 
-        let addr = ctx.address();
         LuaService {
-            addr,
+            node,
+            addr: ctx.address(),
             lua,
-            file: file.to_string(),
+            filename,
             version: version + 1,
             serv: None,
         }

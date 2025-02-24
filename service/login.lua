@@ -9,6 +9,7 @@ end
 
 function login:started(ctx)
     print(("login service started, version = %d"):format(ctx.version))
+    print("hello", flying.getenv("hello"))
 end
 
 function login:message(ctx, ...)
