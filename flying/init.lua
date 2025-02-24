@@ -44,11 +44,24 @@ function flying.service(serv)
     end
 
     function context._message(data)
-        print("message:", data)
         return pack(serv.message(state, context, table.unpack(unpack(data))))
     end
 
     return context
+end
+
+function flying.oneshotservice(init)
+    local serv = {}
+
+    function serv:init(ctx)
+        init(ctx)
+        ctx.stop()
+    end
+
+    function serv:message()
+    end
+
+    return flying.service(serv)
 end
 
 return flying
