@@ -19,11 +19,7 @@ end
 local function try(serv, fname, state, ctx, ...)
     local f = serv[fname]
     if f then
-        local params = { ... }
-        local co = coroutine.create(function()
-            f(state, ctx, table.unpack(params))
-        end)
-        coroutine.resume(co)
+        coroutine.resume(coroutine.create(f), state, ctx, ...)
     end
 end
 
