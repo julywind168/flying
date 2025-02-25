@@ -13,7 +13,7 @@ pub struct Node {
 impl Node {
     pub fn new() -> Self {
         let _lua = Lua::new();
-        let env = _lua.globals();
+        let env = _lua.create_table().unwrap();
         Node { _lua, env, services: HashMap::new() }
     }
 
