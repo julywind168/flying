@@ -7,7 +7,7 @@ use crate::service::LuaService;
 pub struct Node {
     _lua: Lua,
     env: LuaTable,
-    services: HashMap<String, Addr<LuaService>>,
+    pub services: HashMap<String, Addr<LuaService>>,
 }
 
 impl Node {

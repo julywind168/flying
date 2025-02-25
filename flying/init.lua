@@ -43,8 +43,9 @@ function flying.service(serv)
         try(serv, "stopping", state, context)
     end
 
-    function context._message(data)
-        return pack(serv.message(state, context, table.unpack(unpack(data))))
+    function context._message(source, session, type, data)
+        -- print("recv message", source, session, type, data)
+        local res = pack(serv.message(state, context, table.unpack(unpack(data))))
     end
 
     return context
