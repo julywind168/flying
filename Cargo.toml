@@ -7,4 +7,4 @@ license = "Apache-2.0"
 
 [dependencies]
 actix = "0.13.5"
-mlua = { version = "0.10", features = ["lua54", "vendored"] }
+mlua = { version = "0.10", features = ["lua54", "vendored", "async"] }

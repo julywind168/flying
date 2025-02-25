@@ -16,13 +16,6 @@ function flying.session()
     return flying._session
 end
 
-local function try(serv, fname, state, ...)
-    local f = serv[fname]
-    if f then
-        coroutine.resume(coroutine.create(f), state, ...)
-    end
-end
-
 local function pack(...)
     return json.encode({ ... })
 end
@@ -65,32 +58,48 @@ function flying.service(serv)
     local proxy = {}
     assert(serv.message, "message function not found")
 
+    local function task(f, ...)
+        local ok, err = coroutine.resume(coroutine.create(f), ...)
+        if not ok then
+            print(err)
+        end
+    end
+
     function proxy._started(version)
         flying.version = version
-        if version == 1 then
-            try(serv, "init", state)
+        if (flying.version == 1 and serv.init) or serv.started then
+            task(function()
+                if serv.init and flying.version == 1 then
+                    serv.init(state)
+                end
+                if serv.started then
+                    serv.started(state)
+                end
+            end)
         end
-        try(serv, "started", state)
     end
 
     function proxy._stopped()
-        try(serv, "stopped", state)
+        if serv.stopped then
+            task(serv.stopped, state)
+        end
     end
 
     function proxy._stopping()
-        try(serv, "stopping", state)
+        if serv.stopping then
+            task(serv.stopping, state)
+        end
     end
 
     function proxy._message(source, session, type, data)
         -- print("recv message", source, session, type, data)
         if type == REQUEST then
-            local co = coroutine.create(function()
+            task(function()
                 local res = pack(serv.message(state, table.unpack(unpack(data))))
                 if session > 0 then
                     flying.send_message(source, session, RESPONSE, res)
                 end
             end)
-            coroutine.resume(co)
         else
             flying.resume(session, table.unpack(unpack(data)))
         end
@@ -102,9 +111,9 @@ end
 function flying.oneshotservice(init)
     local serv = {}
 
-    function serv:init(ctx)
-        init(ctx)
-        ctx.stop()
+    function serv:init()
+        init()
+        flying.stop()
     end
 
     function serv:message()
