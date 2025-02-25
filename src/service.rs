@@ -1,4 +1,7 @@
-use std::{fs, sync::Arc};
+use std::{
+    fs,
+    sync::{Arc, RwLock},
+};
 
 use actix::prelude::*;
 use mlua::prelude::*;
@@ -14,9 +17,10 @@ struct Stop;
 pub struct Call(pub String);
 
 pub struct LuaService {
-    node: Arc<Node>,
+    node: Arc<RwLock<Node>>,
     addr: Addr<Self>,
     lua: Lua,
+    name: String,
     filename: String,
     version: u32, // reload or flow times
     serv: Option<LuaTable>,
@@ -54,6 +58,7 @@ impl Actor for LuaService {
     }
 
     fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
+        self.node.write().unwrap().remove_service(&self.name);
         let f: LuaFunction = self.serv.as_ref().unwrap().get("_stopping").unwrap();
         let _ = f.call::<()>(());
         Running::Stop
@@ -82,32 +87,35 @@ impl Handler<Stop> for LuaService {
     }
 }
 
-pub fn new(filename: String, node: Arc<Node>, version: u32) -> Addr<LuaService> {
-    LuaService::create(|ctx| {
+pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32) {
+    let node_ = node.clone();
+    let name_ = name.clone();
+    let serv = LuaService::create(|ctx| {
         let lua = Lua::new();
         let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
 
         let newservice = {
             let node = node.clone();
-            lua.create_function(move |_, filename: String| {
-                let _ = new(filename, node.clone(), 0);
+            lua.create_function(move |_, (name, filename)| {
+                let _ = new(name, filename, node.clone(), 0);
                 Ok(())
-            }).unwrap()
+            })
+            .unwrap()
         };
 
         let setenv = {
             let node = node.clone();
             lua.create_function(move |_, (key, value): (String, String)| {
-                node.setenv(&key, value);
+                node.read().unwrap().setenv(&key, value);
                 Ok(())
-            }).unwrap()
+            })
+            .unwrap()
         };
 
         let getenv = {
             let node = node.clone();
-            lua.create_function(move |_, key: String| {
-                Ok(node.getenv(&key))
-            }).unwrap()
+            lua.create_function(move |_, key: String| Ok(node.read().unwrap().getenv(&key)))
+                .unwrap()
         };
 
         flying.set("newservice", newservice).unwrap();
@@ -118,9 +126,11 @@ pub fn new(filename: String, node: Arc<Node>, version: u32) -> Addr<LuaService> 
             node,
             addr: ctx.address(),
             lua,
+            name,
             filename,
             version: version + 1,
             serv: None,
         }
-    })
+    });
+    node_.write().unwrap().insert_service(name_, serv);
 }
