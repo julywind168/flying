@@ -2,26 +2,28 @@ local flying = require "flying"
 
 local ping = {}
 
-function ping:init(ctx)
+function ping:init()
     print("ping service init")
 end
 
-function ping:started(ctx)
-    print(("ping service started, version = %d"):format(ctx.version))
+function ping:started()
+    print("ping service started")
     print("hello", flying.getenv("hello"))
 end
 
-function ping:message(ctx, ...)
-    print("ping recv message:", ...)
-    ctx.stop()
-    return true, 123
+function ping:message(cmd)
+    if cmd == "ping" then
+        return "pong"
+    else
+        print("PING " .. tostring(cmd))
+    end
 end
 
-function ping:stopping(ctx)
+function ping:stopping()
     print("ping service stopping")
 end
 
-function ping:stopped(ctx)
+function ping:stopped()
     print("ping service stopped")
 end
 

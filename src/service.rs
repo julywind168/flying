@@ -70,15 +70,6 @@ impl LuaService {
         let loaded = self.lua.load(&script).eval::<LuaTable>();
         match loaded {
             Ok(serv) => {
-                let addr = self.addr.clone();
-                let stop = self
-                    .lua
-                    .create_function(move |_, ()| {
-                        addr.do_send(Stop);
-                        Ok(())
-                    })
-                    .unwrap();
-                serv.set("stop", stop).unwrap();
                 self.serv = Some(serv);
             }
             Err(e) => panic!("service {} load error: {}", self.filename, e),
@@ -114,6 +105,15 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
     let serv = LuaService::create(|ctx| {
         let lua = Lua::new();
         let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
+
+        let stop = {
+            let addr = ctx.address();
+            lua.create_function(move |_, ()| {
+                addr.do_send(Stop);
+                Ok(())
+            })
+            .unwrap()
+        };
 
         let newservice = {
             let node = node.clone();
@@ -158,6 +158,8 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
             .unwrap()
         };
 
+        flying.set("name", name.clone()).unwrap();
+        flying.set("stop", stop).unwrap();
         flying.set("newservice", newservice).unwrap();
         flying.set("setenv", setenv).unwrap();
         flying.set("getenv", getenv).unwrap();
