@@ -16,10 +16,10 @@ function flying.session()
     return flying._session
 end
 
-local function try(serv, fname, state, ctx, ...)
+local function try(serv, fname, state, ...)
     local f = serv[fname]
     if f then
-        coroutine.resume(coroutine.create(f), state, ctx, ...)
+        coroutine.resume(coroutine.create(f), state, ...)
     end
 end
 
