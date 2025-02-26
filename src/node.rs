@@ -1,12 +1,14 @@
 use actix::Addr;
 use mlua::prelude::*;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 
-use crate::service::LuaService;
+use crate::{service::LuaService, utils};
 
 pub struct Node {
     _lua: Lua,
     env: LuaTable,
+    pub start_time: u64,
+    pub start_instant: std::time::Instant,
     pub services: HashMap<String, Addr<LuaService>>,
 }
 
@@ -14,7 +16,13 @@ impl Node {
     pub fn new() -> Self {
         let _lua = Lua::new();
         let env = _lua.create_table().unwrap();
-        Node { _lua, env, services: HashMap::new() }
+        Node {
+            _lua,
+            env,
+            start_time: utils::get_timestamp_ms(),
+            start_instant: Instant::now(),
+            services: HashMap::new(),
+        }
     }
 
     pub fn setenv(&self, key: &str, value: String) {

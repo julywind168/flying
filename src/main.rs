@@ -4,6 +4,7 @@ use actix::clock::sleep;
 
 mod node;
 mod service;
+mod utils;
 
 #[actix::main]
 async fn main() {

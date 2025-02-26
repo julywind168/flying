@@ -1,6 +1,7 @@
 use std::{
     fs,
     sync::{Arc, RwLock},
+    time::Instant,
 };
 
 use actix::prelude::*;
@@ -45,6 +46,7 @@ pub struct LuaService {
     filename: String,
     version: u32, // reload or flow times
     serv: Option<LuaTable>,
+    next_tick_time: Option<Instant>,
 }
 
 impl Handler<LuaMessage> for LuaService {
@@ -158,12 +160,38 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
             .unwrap()
         };
 
+        let starttime = {
+            let node = node.clone();
+            lua.create_function(move |_, ()| Ok(node.read().unwrap().start_time))
+                .unwrap()
+        };
+
+        let now = {
+            let node = node.clone();
+            lua.create_function(move |_, ()| {
+                Ok(node.read().unwrap().start_instant.elapsed().as_millis() as u64)
+            })
+            .unwrap()
+        };
+
+        let time = {
+            let node = node.clone();
+            lua.create_function(move |_, ()| {
+                Ok(node.read().unwrap().start_time
+                    + node.read().unwrap().start_instant.elapsed().as_millis() as u64)
+            })
+            .unwrap()
+        };
+
         flying.set("name", name.clone()).unwrap();
         flying.set("stop", stop).unwrap();
         flying.set("newservice", newservice).unwrap();
         flying.set("setenv", setenv).unwrap();
         flying.set("getenv", getenv).unwrap();
         flying.set("send_message", send_message).unwrap();
+        flying.set("starttime", starttime).unwrap();
+        flying.set("now", now).unwrap();
+        flying.set("time", time).unwrap();
 
         LuaService {
             node,
@@ -173,6 +201,7 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
             filename,
             version: version + 1,
             serv: None,
+            next_tick_time: None,
         }
     });
     node_.write().unwrap().insert_service(name_, serv);
