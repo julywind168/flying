@@ -187,7 +187,15 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
                         ty: ty.into(),
                         data,
                     };
-                    let serv = node.read().unwrap().services.read().unwrap().get(&dest).unwrap().clone();
+                    let serv = node
+                        .read()
+                        .unwrap()
+                        .services
+                        .read()
+                        .unwrap()
+                        .get(&dest)
+                        .unwrap()
+                        .clone();
                     serv.do_send(msg);
                     Ok(())
                 },
@@ -211,11 +219,8 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
 
         let time = {
             let node = node.clone();
-            lua.create_function(move |_, ()| {
-                Ok(node.read().unwrap().start_time
-                    + node.read().unwrap().start_instant.elapsed().as_millis() as u64)
-            })
-            .unwrap()
+            lua.create_function(move |_, ()| Ok(node.read().unwrap().gettime()))
+                .unwrap()
         };
 
         let set_next_tick_time = {
@@ -236,7 +241,8 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
         flying.set("starttime", starttime).unwrap();
         flying.set("now", now).unwrap();
         flying.set("time", time).unwrap();
-        flying.set("set_next_tick_time", set_next_tick_time)
+        flying
+            .set("set_next_tick_time", set_next_tick_time)
             .unwrap();
 
         LuaService {

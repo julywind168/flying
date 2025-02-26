@@ -5,10 +5,11 @@ local REQUEST <const> = 0
 local RESPONSE <const> = 1
 
 local flying = {
-    name = "",  -- set by rust
+    name = "", -- set by rust
     version = 0,
     _session = 0,
     _wait = {},
+    _sleep = {},
 }
 
 function flying.session()
@@ -33,12 +34,31 @@ function flying.wait(session)
     return coroutine.yield()
 end
 
-function flying.resume(session, ...)
+function flying.wakeup(session, ...)
     local co = flying._wait[session]
     if co then
         flying._wait[session] = nil
         return coroutine.resume(co, ...)
     end
+end
+
+function flying.sleep(ms)
+    local time = flying.time() + ms
+    table.insert(flying._sleep, { time = time, co = coroutine.running() })
+    table.sort(flying._sleep, function(a, b)
+        return a.time < b.time
+    end)
+    flying.set_next_tick_time(flying._sleep[1].time)
+    return coroutine.yield()
+end
+
+function flying.tick()
+    local now = flying.time()
+    while #flying._sleep > 0 and flying._sleep[1].time <= now do
+        local item = table.remove(flying._sleep, 1)
+        coroutine.resume(item.co)
+    end
+    flying.set_next_tick_time(flying._sleep[1] and flying._sleep[1].time or nil)
 end
 
 function flying.call(source, ...)
@@ -66,7 +86,7 @@ function flying.service(serv)
     end
 
     function proxy._tick()
-
+        flying.tick()
     end
 
     function proxy._started(version)
@@ -106,7 +126,7 @@ function flying.service(serv)
                 end
             end)
         else
-            flying.resume(session, table.unpack(unpack(data)))
+            flying.wakeup(session, table.unpack(unpack(data)))
         end
     end
 
