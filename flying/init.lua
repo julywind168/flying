@@ -65,8 +65,13 @@ function flying.service(serv)
         end
     end
 
+    function proxy._tick()
+
+    end
+
     function proxy._started(version)
         flying.version = version
+        -- todo: set_next_tick_duration
         if (flying.version == 1 and serv.init) or serv.started then
             task(function()
                 if serv.init and flying.version == 1 then

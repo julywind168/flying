@@ -1,7 +1,6 @@
 use std::{
     fs,
     sync::{Arc, RwLock},
-    time::Instant,
 };
 
 use actix::prelude::*;
@@ -11,7 +10,40 @@ use crate::node::Node;
 
 #[derive(Message)]
 #[rtype(result = "()")]
-struct Stop;
+pub struct SetNextTickTime(pub Option<u64>);
+
+impl Handler<SetNextTickTime> for LuaService {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetNextTickTime, _ctx: &mut Self::Context) {
+        self.next_tick_time = msg.0;
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Option<u64>")]
+pub struct GetNextTickTime;
+
+impl Handler<GetNextTickTime> for LuaService {
+    type Result = Option<u64>;
+
+    fn handle(&mut self, _: GetNextTickTime, _ctx: &mut Self::Context) -> Self::Result {
+        self.next_tick_time
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Tick;
+
+impl Handler<Tick> for LuaService {
+    type Result = ();
+
+    fn handle(&mut self, _: Tick, _ctx: &mut Self::Context) {
+        let f: LuaFunction = self.serv.as_ref().unwrap().get("_tick").unwrap();
+        let _ = f.call::<()>(());
+    }
+}
 
 #[repr(u8)]
 pub enum LuaMessageType {
@@ -46,7 +78,7 @@ pub struct LuaService {
     filename: String,
     version: u32, // reload or flow times
     serv: Option<LuaTable>,
-    next_tick_time: Option<Instant>,
+    next_tick_time: Option<u64>,
 }
 
 impl Handler<LuaMessage> for LuaService {
@@ -58,9 +90,12 @@ impl Handler<LuaMessage> for LuaService {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "()")]
+struct Stop;
+
 impl Handler<Stop> for LuaService {
     type Result = ();
-
     fn handle(&mut self, _: Stop, ctx: &mut Context<Self>) {
         ctx.stop();
     }
@@ -152,7 +187,7 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
                         ty: ty.into(),
                         data,
                     };
-                    let serv = node.read().unwrap().services.get(&dest).unwrap().clone();
+                    let serv = node.read().unwrap().services.read().unwrap().get(&dest).unwrap().clone();
                     serv.do_send(msg);
                     Ok(())
                 },
@@ -183,6 +218,15 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
             .unwrap()
         };
 
+        let set_next_tick_time = {
+            let addr = ctx.address();
+            lua.create_function(move |_, time| {
+                addr.do_send(SetNextTickTime(time));
+                Ok(())
+            })
+            .unwrap()
+        };
+
         flying.set("name", name.clone()).unwrap();
         flying.set("stop", stop).unwrap();
         flying.set("newservice", newservice).unwrap();
@@ -192,6 +236,8 @@ pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32
         flying.set("starttime", starttime).unwrap();
         flying.set("now", now).unwrap();
         flying.set("time", time).unwrap();
+        flying.set("set_next_tick_time", set_next_tick_time)
+            .unwrap();
 
         LuaService {
             node,
