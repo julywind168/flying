@@ -158,6 +158,10 @@ function flying.service(serv)
 end
 
 function flying.oneshotservice(init)
+    function flying.fork()
+        error("oneshot service can't fork")
+    end
+
     local serv = {}
 
     function serv:init()
