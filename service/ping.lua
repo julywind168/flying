@@ -15,6 +15,9 @@ function ping:started()
             print("tick", i)
         end
     end)
+    flying.timeout(2000, function ()
+        print("timeout")
+    end)
 end
 
 function ping:message(cmd)

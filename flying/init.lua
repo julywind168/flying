@@ -67,6 +67,13 @@ function flying.sleep(ms)
     return coroutine.yield()
 end
 
+function flying.timeout(ms, f)
+    flying.fork(function ()
+        flying.sleep(ms)
+        f()
+    end)
+end
+
 function flying.tick()
     local now = flying.time()
     while #flying._sleepers > 0 and flying._sleepers[1].time <= now do
