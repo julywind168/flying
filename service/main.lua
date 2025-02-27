@@ -7,11 +7,6 @@ local function main()
     flying.send("ping", "How are you?")
     local pong = flying.call("ping", "ping")
     print(pong)
-    for i = 1, 10 do
-        flying.sleep(200)
-        print("tick", i)
-    end
-    print("bye")
 end
 
 return flying.oneshotservice(main)

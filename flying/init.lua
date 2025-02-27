@@ -8,8 +8,9 @@ local flying = {
     name = "", -- set by rust
     version = 0,
     _session = 0,
-    _wait = {},
-    _sleep = {},
+    _waiting = {},
+    _sleepers = {},
+    _tasks = {},
 }
 
 function flying.session()
@@ -30,35 +31,49 @@ end
 
 function flying.wait(session)
     local co = coroutine.running()
-    flying._wait[session] = co
+    flying._waiting[session] = co
     return coroutine.yield()
 end
 
 function flying.wakeup(session, ...)
-    local co = flying._wait[session]
+    local co = flying._waiting[session]
     if co then
-        flying._wait[session] = nil
+        flying._waiting[session] = nil
         return coroutine.resume(co, ...)
+    end
+end
+
+function flying.fork(f, ...)
+    local args = { ... }
+    table.insert(flying._tasks, coroutine.wrap(function ()
+        f(table.unpack(args))
+    end))
+end
+
+local function run_tasks()
+    while #flying._tasks > 0 do
+        local task = table.remove(flying._tasks, 1)
+        task()
     end
 end
 
 function flying.sleep(ms)
     local time = flying.time() + ms
-    table.insert(flying._sleep, { time = time, co = coroutine.running() })
-    table.sort(flying._sleep, function(a, b)
+    table.insert(flying._sleepers, { time = time, co = coroutine.running() })
+    table.sort(flying._sleepers, function(a, b)
         return a.time < b.time
     end)
-    flying.set_next_tick_time(flying._sleep[1].time)
+    flying.set_next_tick_time(flying._sleepers[1].time)
     return coroutine.yield()
 end
 
 function flying.tick()
     local now = flying.time()
-    while #flying._sleep > 0 and flying._sleep[1].time <= now do
-        local item = table.remove(flying._sleep, 1)
+    while #flying._sleepers > 0 and flying._sleepers[1].time <= now do
+        local item = table.remove(flying._sleepers, 1)
         coroutine.resume(item.co)
     end
-    flying.set_next_tick_time(flying._sleep[1] and flying._sleep[1].time or nil)
+    flying.set_next_tick_time(flying._sleepers[1] and flying._sleepers[1].time or nil)
 end
 
 function flying.call(source, ...)
@@ -78,11 +93,12 @@ function flying.service(serv)
     local proxy = {}
     assert(serv.message, "message function not found")
 
-    local function task(f, ...)
+    local function exec(f, ...)
         local ok, err = coroutine.resume(coroutine.create(f), ...)
         if not ok then
             print(err)
         end
+        run_tasks()
     end
 
     function proxy._tick()
@@ -93,7 +109,7 @@ function flying.service(serv)
         flying.version = version
         -- todo: set_next_tick_duration
         if (flying.version == 1 and serv.init) or serv.started then
-            task(function()
+            exec(function()
                 if serv.init and flying.version == 1 then
                     serv.init(state)
                 end
@@ -106,20 +122,21 @@ function flying.service(serv)
 
     function proxy._stopped()
         if serv.stopped then
-            task(serv.stopped, state)
+            exec(serv.stopped, state)
         end
+        print(("service [%s] stopped"):format(flying.name))
     end
 
     function proxy._stopping()
         if serv.stopping then
-            task(serv.stopping, state)
+            exec(serv.stopping, state)
         end
     end
 
     function proxy._message(source, session, type, data)
         -- print("recv message", source, session, type, data)
         if type == REQUEST then
-            task(function()
+            exec(function()
                 local res = pack(serv.message(state, table.unpack(unpack(data))))
                 if session > 0 then
                     flying.send_message(source, session, RESPONSE, res)

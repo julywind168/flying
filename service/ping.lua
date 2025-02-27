@@ -9,11 +9,17 @@ end
 function ping:started()
     print("ping service started")
     print("hello", flying.getenv("hello"))
+    flying.fork(function ()
+        for i = 1, 5 do
+            flying.sleep(200)
+            print("tick", i)
+        end
+    end)
 end
 
 function ping:message(cmd)
     if cmd == "ping" then
-        return "pong"
+        return "PONG"
     else
         print("PING " .. tostring(cmd))
     end
