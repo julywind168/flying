@@ -1,9 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, fs, sync::Arc, time::Duration};
+use std::{collections::HashMap, fs, sync::Arc, time::Duration};
 
 use crate::{message::Message, node::Node};
 use mlua::prelude::*;
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{Mutex, RwLock, mpsc, oneshot},
     time::sleep,
 };
 
@@ -11,8 +11,8 @@ struct LuaFlying {
     node: Arc<Node>,
     name: String,
     scriptname: String,
-    session: RefCell<u128>,
-    sessions: RefCell<HashMap<u128, oneshot::Sender<String>>>,
+    session: Mutex<u128>,
+    sessions: RwLock<HashMap<u128, oneshot::Sender<String>>>,
 }
 
 impl LuaUserData for LuaFlying {
@@ -26,6 +26,12 @@ impl LuaUserData for LuaFlying {
         methods.add_async_method("getenv", async |_, this, k| Ok(this.node.getenv(k).await));
         methods.add_async_method("sleep", async |_, _this, ms| {
             Ok(sleep(Duration::from_millis(ms)).await)
+        });
+        methods.add_async_method("fork", async |_, _this, f: LuaFunction| {
+            tokio::spawn(async move {
+                f.call_async::<()>(()).await.unwrap();
+            });
+            Ok(())
         });
         methods.add_async_method("spawn", async |_, this, (name, scriptname)| {
             Ok(this.node.spawn(name, scriptname).await)
@@ -50,11 +56,14 @@ impl LuaUserData for LuaFlying {
             if let Some(addr) = this.node.query(&dest).await {
                 let (tx, rx) = oneshot::channel();
                 let session = {
-                    *this.session.borrow_mut() += 1;
-                    *this.session.borrow()
+                    let mut session = this.session.lock().await;
+                    *session += 1;
+                    *session
                 };
-                this.sessions.borrow_mut().insert(session, tx);
-
+                {
+                    let mut sessions = this.sessions.write().await;
+                    sessions.insert(session, tx);
+                };
                 tokio::spawn(async move {
                     addr.send(Message::Request {
                         source: this.name.clone(),
@@ -71,16 +80,19 @@ impl LuaUserData for LuaFlying {
                 )))
             }
         });
-        methods.add_method_mut("_wakeup", |_, this, (session, data): (u128, String)| {
-            if let Some(tx) = this.sessions.borrow_mut().remove(&session) {
-                tx.send(data).into_lua_err()
-            } else {
-                Err(mlua::Error::RuntimeError(format!(
-                    "session {} not found",
-                    session
-                )))
-            }
-        });
+        methods.add_async_method(
+            "_wakeup",
+            |_, this, (session, data): (u128, String)| async move {
+                if let Some(tx) = this.sessions.write().await.remove(&session) {
+                    tx.send(data).into_lua_err()
+                } else {
+                    Err(mlua::Error::RuntimeError(format!(
+                        "session {} not found",
+                        session
+                    )))
+                }
+            },
+        );
         methods.add_async_method(
             "_respond",
             |_, this, (dest, session, data): (String, u128, String)| async move {
@@ -110,8 +122,8 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
         node: node.clone(),
         name: name.clone(),
         scriptname: scriptname.clone(),
-        session: RefCell::new(0),
-        sessions: RefCell::new(HashMap::new()),
+        session: Mutex::new(0),
+        sessions: RwLock::new(HashMap::new()),
     };
 
     let (lua, init, callback) = newlua(&scriptname);
@@ -179,14 +191,6 @@ fn newlua(scriptname: &str) -> (Lua, LuaFunction, LuaFunction) {
     let script = fs::read_to_string(scriptname).unwrap();
     lua.load(&script).exec().unwrap();
     let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
-    let fork = lua.create_function(|_, f: LuaFunction| {
-        tokio::spawn(async move {
-            f.call_async::<()>(()).await.unwrap();
-        });
-        Ok(())
-    });
-    flying.set("fork", fork.unwrap()).unwrap();
-
     let init = flying.get::<LuaFunction>("on_init").unwrap();
     let cb = flying.get::<LuaFunction>("on_event").unwrap();
     (lua, init, cb)
