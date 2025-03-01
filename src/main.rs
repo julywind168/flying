@@ -1,15 +1,18 @@
-use std::sync::{Arc, RwLock};
-
+mod message;
 mod node;
 mod service;
-mod utils;
 
-#[actix::main]
+use std::time::Duration;
+use tokio::time::sleep;
+
+use crate::node::Node;
+
+#[tokio::main]
 async fn main() {
-    let node = Arc::new(RwLock::new(node::Node::new()));
-    node::start_timer_thread(node.clone());
-    service::new("main".to_string(), "service/main.lua".to_string(), node, 0);
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    }
+    println!("Hello, world!");
+
+    let node = Node::new("node1".to_string());
+    node.spawn("main".to_string(), "service/main.lua".to_string()).await;
+
+    sleep(Duration::from_secs(10)).await;
 }

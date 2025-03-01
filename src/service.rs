@@ -1,260 +1,193 @@
-use std::{
-    fs,
-    sync::{Arc, RwLock},
+use std::{cell::RefCell, collections::HashMap, fs, sync::Arc, time::Duration};
+
+use crate::{message::Message, node::Node};
+use mlua::prelude::*;
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::sleep,
 };
 
-use actix::prelude::*;
-use mlua::prelude::*;
-
-use crate::node::Node;
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct SetNextTickTime(pub Option<u64>);
-
-impl Handler<SetNextTickTime> for LuaService {
-    type Result = ();
-
-    fn handle(&mut self, msg: SetNextTickTime, _ctx: &mut Self::Context) {
-        self.next_tick_time = msg.0;
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "Option<u64>")]
-pub struct GetNextTickTime;
-
-impl Handler<GetNextTickTime> for LuaService {
-    type Result = Option<u64>;
-
-    fn handle(&mut self, _: GetNextTickTime, _ctx: &mut Self::Context) -> Self::Result {
-        self.next_tick_time
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct Tick;
-
-impl Handler<Tick> for LuaService {
-    type Result = ();
-
-    fn handle(&mut self, _: Tick, _ctx: &mut Self::Context) {
-        let f: LuaFunction = self.serv.as_ref().unwrap().get("_tick").unwrap();
-        let _ = f.call::<()>(());
-    }
-}
-
-#[repr(u8)]
-pub enum LuaMessageType {
-    Request,
-    Response,
-}
-
-impl From<u8> for LuaMessageType {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => LuaMessageType::Request,
-            1 => LuaMessageType::Response,
-            _ => panic!("Invalid LuaMessageType value {}", value),
-        }
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct LuaMessage {
-    pub source: String,
-    pub session: u32,
-    pub ty: LuaMessageType,
-    pub data: String,
-}
-
-pub struct LuaService {
-    node: Arc<RwLock<Node>>,
-    addr: Addr<Self>,
-    lua: Lua,
+struct LuaFlying {
+    node: Arc<Node>,
     name: String,
-    filename: String,
-    version: u32, // reload or flow times
-    serv: Option<LuaTable>,
-    next_tick_time: Option<u64>,
+    scriptname: String,
+    session: RefCell<u128>,
+    sessions: RefCell<HashMap<u128, oneshot::Sender<String>>>,
 }
 
-impl Handler<LuaMessage> for LuaService {
-    type Result = ();
-    fn handle(&mut self, msg: LuaMessage, _ctx: &mut Self::Context) -> Self::Result {
-        let f: LuaFunction = self.serv.as_ref().unwrap().get("_message").unwrap();
-        f.call::<()>((msg.source, msg.session, msg.ty as u8, msg.data))
-            .unwrap()
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-struct Stop;
-
-impl Handler<Stop> for LuaService {
-    type Result = ();
-    fn handle(&mut self, _: Stop, ctx: &mut Context<Self>) {
-        ctx.stop();
-    }
-}
-
-impl LuaService {
-    pub fn load(&mut self) {
-        let script = fs::read_to_string(&self.filename).unwrap();
-        let loaded = self.lua.load(&script).eval::<LuaTable>();
-        match loaded {
-            Ok(serv) => {
-                self.serv = Some(serv);
-            }
-            Err(e) => panic!("service {} load error: {}", self.filename, e),
-        }
-    }
-}
-
-impl Actor for LuaService {
-    type Context = Context<Self>;
-
-    fn started(&mut self, _ctx: &mut Self::Context) {
-        self.load();
-        let f: LuaFunction = self.serv.as_ref().unwrap().get("_started").unwrap();
-        let _ = f.call::<()>(self.version);
-    }
-
-    fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
-        self.node.write().unwrap().remove_service(&self.name);
-        let f: LuaFunction = self.serv.as_ref().unwrap().get("_stopping").unwrap();
-        let _ = f.call::<()>(());
-        Running::Stop
-    }
-
-    fn stopped(&mut self, _ctx: &mut Self::Context) {
-        let f: LuaFunction = self.serv.as_ref().unwrap().get("_stopped").unwrap();
-        let _ = f.call::<()>(());
-    }
-}
-
-pub fn new(name: String, filename: String, node: Arc<RwLock<Node>>, version: u32) {
-    let node_ = node.clone();
-    let name_ = name.clone();
-    let serv = LuaService::create(|ctx| {
-        let lua = Lua::new();
-        let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
-
-        let stop = {
-            let addr = ctx.address();
-            lua.create_function(move |_, ()| {
-                addr.do_send(Stop);
-                Ok(())
-            })
-            .unwrap()
-        };
-
-        let newservice = {
-            let node = node.clone();
-            lua.create_function(move |_, (name, filename)| {
-                let _ = new(name, filename, node.clone(), 0);
-                Ok(())
-            })
-            .unwrap()
-        };
-
-        let setenv = {
-            let node = node.clone();
-            lua.create_function(move |_, (key, value): (String, String)| {
-                node.read().unwrap().setenv(&key, value);
-                Ok(())
-            })
-            .unwrap()
-        };
-
-        let getenv = {
-            let node = node.clone();
-            lua.create_function(move |_, key: String| Ok(node.read().unwrap().getenv(&key)))
-                .unwrap()
-        };
-
-        let send_message = {
-            let node = node.clone();
-            let source = name.clone();
-            lua.create_function(
-                move |_, (dest, session, ty, data): (String, u32, u8, String)| {
-                    let msg = LuaMessage {
-                        source: source.clone(),
-                        session,
-                        ty: ty.into(),
+impl LuaUserData for LuaFlying {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("nodename", |_, this, ()| Ok(this.node.name.clone()));
+        methods.add_method("name", |_, this, ()| Ok(this.name.clone()));
+        methods.add_method("scriptname", |_, this, ()| Ok(this.scriptname.clone()));
+        methods.add_async_method("setenv", async |_, this, (k, v)| {
+            Ok(this.node.setenv(k, v).await)
+        });
+        methods.add_async_method("getenv", async |_, this, k| Ok(this.node.getenv(k).await));
+        methods.add_async_method("sleep", async |_, _this, ms| {
+            Ok(sleep(Duration::from_millis(ms)).await)
+        });
+        methods.add_async_method("spawn", async |_, this, (name, scriptname)| {
+            Ok(this.node.spawn(name, scriptname).await)
+        });
+        methods.add_async_method("stop", async |_, this, ()| {
+            Ok(this.node.sendto(&this.name, Message::Stopping).await)
+        });
+        methods.add_async_method("send", async |_, this, (dest, data): (String, String)| {
+            Ok(this
+                .node
+                .sendto(
+                    &dest,
+                    Message::Request {
+                        source: this.name.clone(),
+                        session: 0,
                         data,
-                    };
-                    let serv = node
-                        .read()
-                        .unwrap()
-                        .services
-                        .read()
-                        .unwrap()
-                        .get(&dest)
-                        .unwrap()
-                        .clone();
-                    serv.do_send(msg);
-                    Ok(())
-                },
-            )
-            .unwrap()
-        };
+                    },
+                )
+                .await)
+        });
+        methods.add_async_method("call", async |_, this, (dest, data): (String, String)| {
+            if let Some(addr) = this.node.query(&dest).await {
+                let (tx, rx) = oneshot::channel();
+                let session = {
+                    *this.session.borrow_mut() += 1;
+                    *this.session.borrow()
+                };
+                this.sessions.borrow_mut().insert(session, tx);
 
-        let starttime = {
-            let node = node.clone();
-            lua.create_function(move |_, ()| Ok(node.read().unwrap().start_time))
-                .unwrap()
-        };
+                tokio::spawn(async move {
+                    addr.send(Message::Request {
+                        source: this.name.clone(),
+                        session,
+                        data,
+                    })
+                    .await
+                });
+                Ok(rx.await.into_lua_err())
+            } else {
+                Err(mlua::Error::RuntimeError(format!(
+                    "service {} not found",
+                    dest
+                )))
+            }
+        });
+        methods.add_method_mut("_wakeup", |_, this, (session, data): (u128, String)| {
+            if let Some(tx) = this.sessions.borrow_mut().remove(&session) {
+                tx.send(data).into_lua_err()
+            } else {
+                Err(mlua::Error::RuntimeError(format!(
+                    "session {} not found",
+                    session
+                )))
+            }
+        });
+        methods.add_async_method(
+            "_respond",
+            |_, this, (dest, session, data): (String, u128, String)| async move {
+                Ok(this
+                    .node
+                    .sendto(
+                        &dest,
+                        Message::Response {
+                            source: this.name.clone(),
+                            session,
+                            data,
+                        },
+                    )
+                    .await)
+            },
+        );
+    }
+}
 
-        let now = {
-            let node = node.clone();
-            lua.create_function(move |_, ()| {
-                Ok(node.read().unwrap().start_instant.elapsed().as_millis() as u64)
-            })
-            .unwrap()
-        };
+pub type Service = mpsc::Sender<Message>;
 
-        let time = {
-            let node = node.clone();
-            lua.create_function(move |_, ()| Ok(node.read().unwrap().gettime()))
-                .unwrap()
-        };
+pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
+    let (tx, mut rx) = mpsc::channel(16);
+    let _ = tx.send(Message::Started).await;
+    let tx2 = tx.clone();
+    let core = LuaFlying {
+        node: node.clone(),
+        name: name.clone(),
+        scriptname: scriptname.clone(),
+        session: RefCell::new(0),
+        sessions: RefCell::new(HashMap::new()),
+    };
 
-        let set_next_tick_time = {
-            let addr = ctx.address();
-            lua.create_function(move |_, time| {
-                addr.do_send(SetNextTickTime(time));
-                Ok(())
-            })
-            .unwrap()
-        };
+    let (lua, init, callback) = newlua(&scriptname);
+    init.call::<()>(core).unwrap();
 
-        flying.set("name", name.clone()).unwrap();
-        flying.set("stop", stop).unwrap();
-        flying.set("newservice", newservice).unwrap();
-        flying.set("setenv", setenv).unwrap();
-        flying.set("getenv", getenv).unwrap();
-        flying.set("send_message", send_message).unwrap();
-        flying.set("starttime", starttime).unwrap();
-        flying.set("now", now).unwrap();
-        flying.set("time", time).unwrap();
-        flying
-            .set("set_next_tick_time", set_next_tick_time)
-            .unwrap();
-
-        LuaService {
-            node,
-            addr: ctx.address(),
-            lua,
-            name,
-            filename,
-            version: version + 1,
-            serv: None,
-            next_tick_time: None,
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                Message::Request {
+                    source,
+                    session,
+                    data,
+                } => {
+                    let source = source.clone();
+                    let callback = callback.clone();
+                    tokio::spawn(async move {
+                        callback
+                            .call_async::<String>(("request", source.clone(), session, data))
+                            .await
+                            .unwrap_or("".to_string())
+                    });
+                }
+                Message::Response {
+                    source,
+                    session,
+                    data,
+                } => {
+                    let callback = callback.clone();
+                    tokio::spawn(async move {
+                        callback
+                            .call_async::<()>(("response", source, session, data))
+                            .await
+                            .unwrap();
+                    });
+                }
+                Message::Started => {
+                    let callback = callback.clone();
+                    tokio::spawn(async move {
+                        callback.call_async::<()>("started").await.unwrap();
+                    });
+                }
+                Message::Stopping => {
+                    let tx = tx2.clone();
+                    let callback = callback.clone();
+                    tokio::spawn(async move {
+                        callback.call_async::<()>("stopping").await.unwrap();
+                        tx.clone().send(Message::Stopped).await.unwrap();
+                    });
+                }
+                Message::Stopped => {
+                    break;
+                }
+            }
         }
+        println!("{} Stopped", name);
+        node.remove(&name).await;
+        callback.call_async::<()>("stopped").await.unwrap();
+        let _lua = lua;
     });
-    node_.write().unwrap().insert_service(name_, serv);
+    tx
+}
+
+fn newlua(scriptname: &str) -> (Lua, LuaFunction, LuaFunction) {
+    let lua = Lua::new();
+    let script = fs::read_to_string(scriptname).unwrap();
+    lua.load(&script).exec().unwrap();
+    let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
+    let fork = lua.create_function(|_, f: LuaFunction| {
+        tokio::spawn(async move {
+            f.call_async::<()>(()).await.unwrap();
+        });
+        Ok(())
+    });
+    flying.set("fork", fork.unwrap()).unwrap();
+
+    let init = flying.get::<LuaFunction>("on_init").unwrap();
+    let cb = flying.get::<LuaFunction>("on_event").unwrap();
+    (lua, init, cb)
 }

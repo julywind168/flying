@@ -2,38 +2,17 @@ local flying = require "flying"
 
 local ping = {}
 
-function ping:init()
-    print("ping service init")
-end
-
 function ping:started()
-    print("ping service started")
-    print("hello", flying.getenv("hello"))
-    flying.fork(function ()
-        for i = 1, 5 do
-            flying.sleep(200)
-            print("tick", i)
-        end
-    end)
-    flying.timeout(2000, function ()
-        print("timeout")
-    end)
+    print("ping started")
 end
 
-function ping:message(cmd)
-    if cmd == "ping" then
-        return "PONG"
-    else
-        print("PING " .. tostring(cmd))
-    end
-end
-
-function ping:stopping()
-    print("ping service stopping")
+function ping:message(source, message)
+    print("ping message", source, message)
+    return "PONG"
 end
 
 function ping:stopped()
-    print("ping service stopped")
+    print("ping stopped")
 end
 
-return flying.service(ping)
+flying.start(ping)
