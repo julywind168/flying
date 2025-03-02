@@ -42,18 +42,21 @@ impl LuaUserData for LuaFlying {
         methods.add_async_method("stop", async |_, this, ()| {
             Ok(this.node.sendto(&this.name, Message::Stopping).await)
         });
-        methods.add_async_method("send", async |_, this, (dest, data): (String, String)| {
-            Ok(this
-                .node
-                .sendto(
+        methods.add_method("send", |_, this, (dest, data): (String, String)| {
+            let node = this.node.clone();
+            let source = this.name.clone();
+            tokio::spawn(async move {
+                node.sendto(
                     &dest,
                     Message::Request {
-                        source: this.name.clone(),
+                        source,
                         session: 0,
                         data,
                     },
                 )
-                .await)
+                .await
+            });
+            Ok(())
         });
         methods.add_async_method("call", async |_, this, (dest, data): (String, String)| {
             if let Some(addr) = this.node.query(&dest).await {
