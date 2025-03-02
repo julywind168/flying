@@ -12,6 +12,8 @@ function main:started()
         end
     end)
 
+    flying.sleep(100)
+
     for i = 1, 5 do
         flying.sleep(200)
         print("main tick", i)

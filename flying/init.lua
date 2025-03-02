@@ -1,5 +1,5 @@
 local flying = {}
-local service = nil
+local service = {}
 
 function flying.start(s)
     service = s
@@ -19,25 +19,25 @@ end
 local handle = {}
 
 function handle.started()
-    if service and service.started then
+    if service.started then
         service:started()
     end
 end
 
 function handle.stopping()
-    if service and service.stopping then
+    if service.stopping then
         service:stopping()
     end
 end
 
 function handle.stopped()
-    if service and service.stopped then
+    if service.stopped then
         service:stopped()
     end
 end
 
 function handle.request(source, session, message)
-    local r = service and service.message and service:message(source, message) or ""
+    local r = service.message and service:message(source, message) or ""
     if session > 0 then
         flying._respond(source, session, r)
     end
