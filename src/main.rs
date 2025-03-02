@@ -2,6 +2,7 @@ mod message;
 mod node;
 mod service;
 mod utils;
+mod flying;
 
 use std::time::Duration;
 use tokio::time::sleep;
@@ -15,5 +16,7 @@ async fn main() {
     let node = Node::new("node1".to_string());
     node.spawn("main".to_string(), "service/main.lua".to_string()).await;
 
-    sleep(Duration::from_secs(10)).await;
+    loop {
+        sleep(Duration::from_secs(1)).await;
+    }
 }

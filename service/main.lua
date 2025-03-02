@@ -6,19 +6,13 @@ function main:started()
     print("main started", flying.starttime(), flying.now(), flying.time())
 
     flying.fork(function ()
-        for i = 1, 10 do
+        for i = 1, 5 do
             flying.sleep(100)
-            print("main fork tick", i)
+            print("main tick", i)
         end
     end)
 
-    flying.sleep(100)
-
-    for i = 1, 5 do
-        flying.sleep(200)
-        print("main tick", i)
-    end
-
+    flying.spawn("echo", "service/echo.lua")
     flying.spawn("ping", "service/ping.lua")
     print(flying.call("ping", "PING"))
 end
