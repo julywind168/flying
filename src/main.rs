@@ -1,6 +1,7 @@
 mod message;
 mod node;
 mod service;
+mod utils;
 
 use std::time::Duration;
 use tokio::time::sleep;

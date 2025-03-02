@@ -20,6 +20,9 @@ impl LuaUserData for LuaFlying {
         methods.add_method("nodename", |_, this, ()| Ok(this.node.name.clone()));
         methods.add_method("name", |_, this, ()| Ok(this.name.clone()));
         methods.add_method("scriptname", |_, this, ()| Ok(this.scriptname.clone()));
+        methods.add_method("starttime", |_, this, ()| Ok(this.node.start_time));
+        methods.add_method("now", |_, this, ()| Ok(this.node.now()));
+        methods.add_method("time", |_, this, ()| Ok(this.node.time()));
         methods.add_async_method("setenv", async |_, this, (k, v)| {
             Ok(this.node.setenv(k, v).await)
         });

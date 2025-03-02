@@ -3,7 +3,7 @@ local flying = require "flying"
 local main = {}
 
 function main:started()
-    print("main started")
+    print("main started", flying.starttime(), flying.now(), flying.time())
 
     flying.fork(function ()
         for i = 1, 10 do

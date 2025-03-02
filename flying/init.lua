@@ -31,7 +31,7 @@ function handle.stopping()
 end
 
 function handle.stopped()
-    function flying.call()
+    function flying.call(...)
         error("cannot call flying.call in stopped state")
     end
     if service.stopped then

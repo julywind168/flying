@@ -3,11 +3,13 @@ use tokio::sync::Mutex;
 
 use crate::{
     message::Message,
-    service::{self, Service},
+    service::{self, Service}, utils,
 };
 
 pub struct Node {
     pub name: String,
+    pub start_time: u64,
+    start_instant: std::time::Instant,
     env: Mutex<HashMap<String, String>>,
     services: Mutex<HashMap<String, Service>>,
 }
@@ -16,9 +18,19 @@ impl Node {
     pub fn new(name: String) -> Arc<Self> {
         Arc::new(Self {
             name,
+            start_time: utils::get_timestamp_ms(),
+            start_instant: std::time::Instant::now(),
             env: Mutex::new(HashMap::new()),
             services: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn now(self: &Arc<Self>) -> u64 {
+        self.start_instant.elapsed().as_millis() as u64
+    }
+
+    pub fn time(self: &Arc<Self>) -> u64 {
+        self.start_time + self.now()
     }
 
     pub async fn setenv(self: &Arc<Self>, key: String, value: String) {
