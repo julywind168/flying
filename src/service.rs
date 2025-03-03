@@ -1,6 +1,10 @@
 use std::{collections::HashMap, fs, sync::Arc, time::Duration};
 
-use crate::{flying::{mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket}, message::Message, node::Node};
+use crate::{
+    flying::{mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket},
+    message::Message,
+    node::Node,
+};
 use mlua::prelude::*;
 use tokio::{
     sync::{Mutex, RwLock, mpsc, oneshot},
@@ -23,10 +27,11 @@ impl LuaUserData for LuaFlying {
         methods.add_method("starttime", |_, this, ()| Ok(this.node.start_time));
         methods.add_method("now", |_, this, ()| Ok(this.node.now()));
         methods.add_method("time", |_, this, ()| Ok(this.node.time()));
-        methods.add_async_method("setenv", async |_, this, (k, v)| {
-            Ok(this.node.setenv(k, v).await)
+        methods.add_method("setenv", |_, this, (k, v): (String, String)| {
+            this.node.setenv(k, v);
+            Ok(())
         });
-        methods.add_async_method("getenv", async |_, this, k| Ok(this.node.getenv(k).await));
+        methods.add_method("getenv", |_, this, k: String| Ok(this.node.getenv(&k)));
         methods.add_async_method("sleep", async |_, _this, ms| {
             Ok(sleep(Duration::from_millis(ms)).await)
         });
@@ -59,7 +64,7 @@ impl LuaUserData for LuaFlying {
             Ok(())
         });
         methods.add_async_method("call", async |_, this, (dest, data): (String, String)| {
-            if let Some(addr) = this.node.query(&dest).await {
+            if let Some(addr) = this.node.query(&dest) {
                 let (tx, rx) = oneshot::channel();
                 let session = {
                     let mut session = this.session.lock().await;

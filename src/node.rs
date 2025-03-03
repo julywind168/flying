@@ -1,17 +1,18 @@
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Mutex;
+use dashmap::DashMap;
+use std::sync::Arc;
 
 use crate::{
     message::Message,
-    service::{self, Service}, utils,
+    service::{self, Service},
+    utils,
 };
 
 pub struct Node {
     pub name: String,
     pub start_time: u64,
     start_instant: std::time::Instant,
-    env: Mutex<HashMap<String, String>>,
-    services: Mutex<HashMap<String, Service>>,
+    env: DashMap<String, String>,
+    services: DashMap<String, Service>,
 }
 
 impl Node {
@@ -20,8 +21,8 @@ impl Node {
             name,
             start_time: utils::get_timestamp_ms(),
             start_instant: std::time::Instant::now(),
-            env: Mutex::new(HashMap::new()),
-            services: Mutex::new(HashMap::new()),
+            env: DashMap::new(),
+            services: DashMap::new(),
         })
     }
 
@@ -33,34 +34,34 @@ impl Node {
         self.start_time + self.now()
     }
 
-    pub async fn setenv(self: &Arc<Self>, key: String, value: String) {
-        self.env.lock().await.insert(key, value);
+    pub fn setenv(self: &Arc<Self>, key: String, value: String) {
+        self.env.insert(key, value);
     }
 
-    pub async fn getenv(self: &Arc<Self>, key: String) -> Option<String> {
-        self.env.lock().await.get(&key).cloned()
+    pub fn getenv(self: &Arc<Self>, key: &str) -> Option<String> {
+        self.env.get(key).map(|v| v.clone())
     }
 
     pub async fn sendto(self: &Arc<Self>, dest: &str, msg: Message) {
-        if let Some(service) = self.services.lock().await.get(dest) {
+        if let Some(service) = self.services.get(dest) {
             service.send(msg).await.unwrap();
         } else {
             println!("Service {} not found", dest);
         }
     }
 
-    pub async fn query(self: &Arc<Self>, name: &str) -> Option<Service> {
-        self.services.lock().await.get(name).cloned()
+    pub fn query(self: &Arc<Self>, name: &str) -> Option<Service> {
+        self.services.get(name).map(|v| v.clone())
     }
 
     pub async fn remove(self: &Arc<Self>, name: &str) {
-        self.services.lock().await.remove(name);
+        self.services.remove(name);
     }
 
     pub async fn spawn(self: &Arc<Self>, name: String, scriptname: String) {
-        self.services
-            .lock()
-            .await
-            .insert(name.clone(), service::new(name, scriptname, self.clone()).await);
+        self.services.insert(
+            name.clone(),
+            service::new(name, scriptname, self.clone()).await,
+        );
     }
 }

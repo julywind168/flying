@@ -9,3 +9,4 @@ license = "Apache-2.0"
 tokio = { version = "1.43.0", features = ["full"] }
 mlua = { version = "0.10", features = ["lua54", "vendored", "async", "send"] }
 mongodb = { version = "3.2.1" }
+dashmap = "6.1.0"
