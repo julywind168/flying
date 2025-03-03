@@ -12,6 +12,7 @@ function main:started()
         end
     end)
 
+    flying.spawn("test_mongo", "service/test_mongo.lua");
     flying.spawn("echo", "service/echo.lua")
     flying.spawn("ping", "service/ping.lua")
     print(flying.call("ping", "PING"))

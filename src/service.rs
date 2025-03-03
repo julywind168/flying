@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, sync::Arc, time::Duration};
 
-use crate::{flying::socket::lua_open_flying_socket, message::Message, node::Node};
+use crate::{flying::{mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket}, message::Message, node::Node};
 use mlua::prelude::*;
 use tokio::{
     sync::{Mutex, RwLock, mpsc, oneshot},
@@ -198,6 +198,7 @@ fn newlua(scriptname: &str) -> (Lua, LuaFunction, LuaFunction) {
     lua.load(&script).exec().unwrap();
     let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
     lua_open_flying_socket(&lua, &flying);
+    lua_open_flying_mongodb(&lua, &flying);
     let init = flying.get::<LuaFunction>("on_init").unwrap();
     let cb = flying.get::<LuaFunction>("on_event").unwrap();
     (lua, init, cb)
