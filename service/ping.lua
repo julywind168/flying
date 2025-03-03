@@ -7,7 +7,7 @@ function ping:started()
 end
 
 function ping:message(source, message)
-    print("ping message", source, message)
+    -- print("ping message", source, message)
     return "PONG"
 end
 

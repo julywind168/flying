@@ -15,7 +15,15 @@ function main:started()
     -- flying.spawn("test_mongo", "service/test_mongo.lua");
     flying.spawn("echo", "service/echo.lua")
     flying.spawn("ping", "service/ping.lua")
-    print(flying.call("ping", "PING"))
+
+    flying.fork(function ()
+        print("Benchmarking ...")
+        local now = flying.now()
+        for i = 1, 100000 do
+            flying.call("ping", "PING")
+        end
+        print("Benchmarking, 10w times call use: ", flying.now() - now, "ms")
+    end)
 end
 
 function main:message(source, message)
