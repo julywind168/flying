@@ -51,6 +51,7 @@ pub fn is_transient_error(e: &io::Error) -> bool {
 
 pub fn lua_open_flying_socket(lua: &Lua, flying: &LuaTable) {
     let socket = lua.create_table().unwrap();
+
     let listen = lua
         .create_async_function(|_, addr: String| async move {
             let addr: SocketAddr = addr.parse::<SocketAddr>()?;
@@ -58,7 +59,17 @@ pub fn lua_open_flying_socket(lua: &Lua, flying: &LuaTable) {
             Ok(LuaTcpListener(listener))
         })
         .unwrap();
+
+    let connect = lua
+        .create_async_function(|_, addr: String| async move {
+            let addr: SocketAddr = addr.parse::<SocketAddr>()?;
+            let stream = TcpStream::connect(addr).await?;
+            Ok(LuaTcpStream(stream))
+        })
+        .unwrap();
+
     socket.set("listen", listen).unwrap();
+    socket.set("connect", connect).unwrap();
 
     flying.set("socket", socket).unwrap();
 }
