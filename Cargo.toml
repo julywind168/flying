@@ -5,6 +5,13 @@ edition = "2024"
 description = "A distributed service framework"
 license = "Apache-2.0"
 
+[profile.release]
+opt-level = 3
+lto = true
+# codegen-units = 1
+# strip = "symbols"
+# panic = "abort"
+
 [dependencies]
 tokio = { version = "1.43.0", features = ["full"] }
 mlua = { version = "0.10", features = ["lua54", "vendored", "async", "send"] }
