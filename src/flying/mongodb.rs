@@ -10,6 +10,19 @@ struct LuaMongoClient(Client);
 struct LuaMongoDatabase(Database);
 struct LuaMongoCollection(Collection<Document>);
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn assert_send<T: Send>() {}
+
+    #[test]
+    fn expect_lua_send_trait() {
+        assert_send::<LuaMongoClient>();
+        assert_send::<LuaMongoDatabase>();
+        assert_send::<LuaMongoCollection>();
+    }
+}
+
 impl LuaUserData for LuaMongoClient {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("database", |_: &Lua, this, dbname: String| {

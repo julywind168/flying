@@ -19,6 +19,17 @@ struct LuaFlying {
     sessions: RwLock<HashMap<u128, oneshot::Sender<String>>>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn assert_send<T: Send>() {}
+
+    #[test]
+    fn expect_lua_send_trait() {
+        assert_send::<LuaFlying>();
+    }
+}
+
 impl LuaUserData for LuaFlying {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("nodename", |_, this, ()| Ok(this.node.name.clone()));

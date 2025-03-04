@@ -9,6 +9,18 @@ use mlua::{BString, prelude::*};
 pub struct LuaTcpListener(TcpListener);
 pub struct LuaTcpStream(TcpStream);
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn assert_send<T: Send>() {}
+
+    #[test]
+    fn expect_lua_send_trait() {
+        assert_send::<LuaTcpListener>();
+        assert_send::<LuaTcpStream>();
+    }
+}
+
 impl LuaUserData for LuaTcpListener {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_async_method_mut("accept", |_, this, ()| async move {
