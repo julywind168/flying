@@ -58,10 +58,6 @@ function handle.request(source, session, message)
     end
 end
 
-function handle.response(source, session, message)
-    flying._wakeup(session, message)
-end
-
 function flying.on_event(event, ...)
     local f = assert(handle[event], "unknown event: " .. event)
     return f(...)

@@ -15,7 +15,7 @@ struct LuaFlying {
     node: Arc<Node>,
     name: String,
     scriptname: String,
-    sessions: DashMap<u128, oneshot::Sender<String>>,
+    sessions: Arc<DashMap<u128, oneshot::Sender<String>>>,
 }
 
 #[cfg(test)]
@@ -98,19 +98,6 @@ impl LuaUserData for LuaFlying {
             },
         );
         methods.add_async_method(
-            "_wakeup",
-            |_, this, (session, data): (u128, String)| async move {
-                if let Some((_, tx)) = this.sessions.remove(&session) {
-                    tx.send(data).into_lua_err()
-                } else {
-                    Err(LuaError::RuntimeError(format!(
-                        "session {} not found",
-                        session
-                    )))
-                }
-            },
-        );
-        methods.add_async_method(
             "_respond",
             |_, this, (dest, session, data): (String, u128, String)| async move {
                 Ok(this
@@ -135,11 +122,12 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
     let (tx, mut rx) = mpsc::channel(16);
     let _ = tx.send(Message::Started).await;
     let tx2 = tx.clone();
+    let sessions = Arc::new(DashMap::new());
     let core = LuaFlying {
         node: node.clone(),
         name: name.clone(),
         scriptname: scriptname.clone(),
-        sessions: DashMap::new(),
+        sessions: sessions.clone(),
     };
 
     let (lua, init, callback) = newlua(&scriptname);
@@ -163,17 +151,15 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
                     });
                 }
                 Message::Response {
-                    source,
+                    source: _,
                     session,
                     data,
                 } => {
-                    let callback = callback.clone();
-                    tokio::spawn(async move {
-                        callback
-                            .call_async::<()>(("response", source, session, data))
-                            .await
-                            .unwrap();
-                    });
+                    if let Some((_, tx)) = sessions.remove(&session) {
+                        tx.send(data).unwrap();
+                    } else {
+                        println!("session not found: {}", session);
+                    }
                 }
                 Message::Started => {
                     let callback = callback.clone();
