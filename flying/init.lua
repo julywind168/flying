@@ -52,10 +52,7 @@ function handle.stopped()
 end
 
 function handle.request(source, session, message)
-    local r = service.message and service:message(source, message) or ""
-    if session > 0 then
-        flying._respond(source, session, r)
-    end
+    return service.message and service:message(source, message) or ""
 end
 
 function flying.on_event(event, ...)

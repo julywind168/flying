@@ -97,22 +97,6 @@ impl LuaUserData for LuaFlying {
                 }
             },
         );
-        methods.add_async_method(
-            "_respond",
-            |_, this, (dest, session, data): (String, u128, String)| async move {
-                Ok(this
-                    .node
-                    .sendto(
-                        &dest,
-                        Message::Response {
-                            source: this.name.clone(),
-                            session,
-                            data,
-                        },
-                    )
-                    .await)
-            },
-        );
     }
 }
 
@@ -143,18 +127,19 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
                 } => {
                     let source = source.clone();
                     let callback = callback.clone();
+                    let node = node.clone();
                     tokio::spawn(async move {
-                        callback
+                        let data = callback
                             .call_async::<String>(("request", source.clone(), session, data))
                             .await
-                            .unwrap_or("".to_string())
+                            .unwrap_or("".to_string());
+                        if session > 0 {
+                            node.sendto(&source, Message::Response { session, data })
+                                .await;
+                        }
                     });
                 }
-                Message::Response {
-                    source: _,
-                    session,
-                    data,
-                } => {
+                Message::Response { session, data } => {
                     if let Some((_, tx)) = sessions.remove(&session) {
                         tx.send(data).unwrap();
                     } else {

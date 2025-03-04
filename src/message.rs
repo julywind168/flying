@@ -10,7 +10,6 @@ pub enum Message {
         data: String,
     },
     Response {
-        source: String,
         session: u128,
         data: String,
     },
