@@ -54,7 +54,7 @@ impl Node {
         self.services.get(name).map(|v| v.clone())
     }
 
-    pub async fn remove(self: &Arc<Self>, name: &str) {
+    pub fn remove(self: &Arc<Self>, name: &str) {
         self.services.remove(name);
     }
 

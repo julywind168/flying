@@ -35,7 +35,7 @@ impl LuaUserData for LuaFlying {
         methods.add_async_method("sleep", async |_, _this, ms| {
             Ok(sleep(Duration::from_millis(ms)).await)
         });
-        methods.add_async_method("fork", async |_, _this, f: LuaFunction| {
+        methods.add_method("fork", |_, _this, f: LuaFunction| {
             tokio::spawn(async move {
                 f.call_async::<()>(()).await.unwrap();
             });
@@ -190,7 +190,7 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
             }
         }
         println!("{} Stopped", name);
-        node.remove(&name).await;
+        node.remove(&name);
         callback.call_async::<()>("stopped").await.unwrap();
         let _lua = lua;
     });
