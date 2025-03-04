@@ -1,13 +1,13 @@
-use std::{collections::HashMap, fs, sync::Arc, time::Duration};
-
 use crate::{
     flying::{mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket},
     message::Message,
     node::Node,
 };
+use dashmap::DashMap;
 use mlua::prelude::*;
+use std::{fs, sync::Arc, time::Duration};
 use tokio::{
-    sync::{Mutex, RwLock, mpsc, oneshot},
+    sync::{mpsc, oneshot},
     time::sleep,
 };
 
@@ -15,8 +15,7 @@ struct LuaFlying {
     node: Arc<Node>,
     name: String,
     scriptname: String,
-    session: Mutex<u128>,
-    sessions: RwLock<HashMap<u128, oneshot::Sender<String>>>,
+    sessions: DashMap<u128, oneshot::Sender<String>>,
 }
 
 #[cfg(test)]
@@ -74,41 +73,37 @@ impl LuaUserData for LuaFlying {
             });
             Ok(())
         });
-        methods.add_async_method("call", async |_, this, (dest, data): (String, String)| {
-            if let Some(addr) = this.node.query(&dest) {
-                let (tx, rx) = oneshot::channel();
-                let session = {
-                    let mut session = this.session.lock().await;
-                    *session += 1;
-                    *session
-                };
-                {
-                    let mut sessions = this.sessions.write().await;
-                    sessions.insert(session, tx);
-                };
-                tokio::spawn(async move {
-                    addr.send(Message::Request {
-                        source: this.name.clone(),
-                        session,
-                        data,
-                    })
-                    .await
-                });
-                Ok(rx.await.into_lua_err())
-            } else {
-                Err(mlua::Error::RuntimeError(format!(
-                    "service {} not found",
-                    dest
-                )))
-            }
-        });
+        methods.add_async_method(
+            "call",
+            async |_, this, (dest, session, data): (String, u128, String)| {
+                if let Some(addr) = this.node.query(&dest) {
+                    let source = this.name.clone();
+                    let (tx, rx) = oneshot::channel();
+                    this.sessions.insert(session, tx);
+                    tokio::spawn(async move {
+                        addr.send(Message::Request {
+                            source,
+                            session,
+                            data,
+                        })
+                        .await
+                    });
+                    Ok(rx.await.into_lua_err())
+                } else {
+                    Err(LuaError::RuntimeError(format!(
+                        "service {} not found",
+                        dest
+                    )))
+                }
+            },
+        );
         methods.add_async_method(
             "_wakeup",
             |_, this, (session, data): (u128, String)| async move {
-                if let Some(tx) = this.sessions.write().await.remove(&session) {
+                if let Some((_, tx)) = this.sessions.remove(&session) {
                     tx.send(data).into_lua_err()
                 } else {
-                    Err(mlua::Error::RuntimeError(format!(
+                    Err(LuaError::RuntimeError(format!(
                         "session {} not found",
                         session
                     )))
@@ -144,8 +139,7 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
         node: node.clone(),
         name: name.clone(),
         scriptname: scriptname.clone(),
-        session: Mutex::new(0),
-        sessions: RwLock::new(HashMap::new()),
+        sessions: DashMap::new(),
     };
 
     let (lua, init, callback) = newlua(&scriptname);

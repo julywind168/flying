@@ -5,16 +5,27 @@ function flying.start(s)
     service = s
 end
 
--- call by rust
-function flying.on_init(core)
-    setmetatable(flying, {__index = function (_, key)
-        return function (first, ...)
-            assert(first ~= flying, "use flying.foo() style instead of flying:foo()")
-            return core[key](core, first, ...)
-        end
-    end})
+local session = 0
+local function newsession()
+    session = session + 1
+    return session
 end
 
+-- call by rust
+function flying.on_init(core)
+    function flying.call(dest, data)
+        return core:call(dest, newsession(), data)
+    end
+
+    setmetatable(flying, {
+        __index = function(_, key)
+            return function(first, ...)
+                assert(first ~= flying, "use flying.foo() style instead of flying:foo()")
+                return core[key](core, first, ...)
+            end
+        end
+    })
+end
 
 local handle = {}
 
@@ -34,6 +45,7 @@ function handle.stopped()
     function flying.call(...)
         error("cannot call flying.call in stopped state")
     end
+
     if service.stopped then
         service:stopped()
     end
