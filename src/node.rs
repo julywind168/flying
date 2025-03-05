@@ -1,3 +1,4 @@
+use anyhow::{Result, anyhow};
 use dashmap::DashMap;
 use std::sync::Arc;
 
@@ -42,11 +43,12 @@ impl Node {
         self.env.get(key).map(|v| v.clone())
     }
 
-    pub async fn sendto(self: &Arc<Self>, dest: &str, msg: Message) {
+    pub async fn sendto(self: &Arc<Self>, dest: &str, msg: Message) -> Result<()> {
         if let Some(service) = self.services.get(dest) {
-            service.send(msg).await.unwrap();
+            service.send(msg).await?;
+            Ok(())
         } else {
-            println!("Service {} not found", dest);
+            Err(anyhow!("Service {} not found", dest))
         }
     }
 

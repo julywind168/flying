@@ -51,7 +51,7 @@ function handle.stopped()
     end
 end
 
-function handle.request(source, session, message)
+function handle.request(source, message)
     return service.message and service:message(source, message) or ""
 end
 

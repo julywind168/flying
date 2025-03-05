@@ -55,7 +55,7 @@ impl LuaUserData for LuaFlying {
             Ok(this.node.spawn(name, scriptname).await)
         });
         methods.add_async_method("stop", async |_, this, ()| {
-            Ok(this.node.sendto(&this.name, Message::Stopping).await)
+            Ok(this.node.sendto(&this.name, Message::Stopping).await.unwrap())
         });
         methods.add_method("send", |_, this, (dest, data): (String, String)| {
             let node = this.node.clone();
@@ -130,11 +130,11 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
                     let node = node.clone();
                     tokio::spawn(async move {
                         let data = callback
-                            .call_async::<String>(("request", source.clone(), session, data))
+                            .call_async::<String>(("request", source.clone(), data))
                             .await
                             .unwrap_or("".to_string());
                         if session > 0 {
-                            node.sendto(&source, Message::Response { session, data })
+                            let _ = node.sendto(&source, Message::Response { session, data })
                                 .await;
                         }
                     });
