@@ -3,34 +3,32 @@ local flying = require "flying"
 local echo = {}
 
 function echo:started()
-    local listener = flying.socket.listen("127.0.0.1:8080")
-    print("listening on 127.0.0.1:8080")
-
-
-    flying.fork(function ()
-        flying.sleep(2000)
+    -- client
+    flying.fork(function()
+        flying.sleep(500)
         local client = flying.socket.connect("127.0.0.1:8080")
         client:write("hello")
-        print("recv:", client:read(100))
-        client:close()
+        print("Server:", client:read(100))
+        client:write("bye")
     end)
 
+    -- server
+    local listener = flying.socket.listen("127.0.0.1:8080")
+    print("Listen on 127.0.0.1:8080")
     while true do
         local client = listener:accept()
         local peer_addr = client:peer_addr()
-        print("connected from " .. peer_addr)
+        print("Connected from " .. peer_addr)
 
         flying.fork(function()
             while true do
                 local data = client:read(100)
                 data = data:match("^%s*(.-)%s*$")
-                print("[" .. peer_addr .. "] " .. data)
                 if data == "" or data == "bye" then
-                    client:write("bye bye\n")
-                    client:close()
                     print("[" .. peer_addr .. "] exited")
                     return
                 end
+                print("[" .. peer_addr .. "] " .. data)
                 client:write("echo: " .. data .. "\n")
             end
         end)
