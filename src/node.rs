@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use std::sync::Arc;
 
@@ -60,10 +60,12 @@ impl Node {
         self.services.remove(name);
     }
 
-    pub async fn spawn(self: &Arc<Self>, name: String, scriptname: String) {
+    pub async fn spawn(self: &Arc<Self>, name: String, scriptname: String) -> Result<()> {
+        let s = service::new(name.clone(), scriptname, self.clone()).await?;
         self.services.insert(
-            name.clone(),
-            service::new(name, scriptname, self.clone()).await,
+            name,
+            s,
         );
+        Ok(())
     }
 }

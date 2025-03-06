@@ -3,6 +3,7 @@ use crate::{
     message::Message,
     node::Node,
 };
+use anyhow::Result;
 use dashmap::DashMap;
 use mlua::prelude::*;
 use std::{fs, sync::Arc, time::Duration};
@@ -47,15 +48,26 @@ impl LuaUserData for LuaFlying {
         });
         methods.add_method("fork", |_, _this, f: LuaFunction| {
             tokio::spawn(async move {
-                f.call_async::<()>(()).await.unwrap();
+                if let Err(e) = f.call_async::<()>(()).await {
+                    log::error!("fork error: {e}");
+                }
             });
             Ok(())
         });
-        methods.add_async_method("spawn", async |_, this, (name, scriptname)| {
-            Ok(this.node.spawn(name, scriptname).await)
-        });
+        methods.add_async_method(
+            "spawn",
+            async |_, this, (name, scriptname): (String, String)| {
+                this.node
+                    .spawn(name, scriptname)
+                    .await
+                    .map_err(LuaError::external)
+            },
+        );
         methods.add_async_method("stop", async |_, this, ()| {
-            Ok(this.node.sendto(&this.name, Message::Stopping).await.unwrap())
+            this.node
+                .sendto(&this.name, Message::Stopping)
+                .await
+                .map_err(LuaError::external)
         });
         methods.add_method("send", |_, this, (dest, data): (String, String)| {
             let node = this.node.clone();
@@ -102,7 +114,7 @@ impl LuaUserData for LuaFlying {
 
 pub type Service = mpsc::Sender<Message>;
 
-pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
+pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Result<Service> {
     let (tx, mut rx) = mpsc::channel(16);
     let _ = tx.send(Message::Started).await;
     let tx2 = tx.clone();
@@ -114,8 +126,8 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
         sessions: sessions.clone(),
     };
 
-    let (lua, init, callback) = newlua(&scriptname);
-    init.call::<()>(core).unwrap();
+    let (lua, init, callback) = newlua(&scriptname)?;
+    init.call::<()>(core)?;
 
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -134,30 +146,39 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
                             .await
                             .unwrap_or("".to_string());
                         if session > 0 {
-                            let _ = node.sendto(&source, Message::Response { session, data })
+                            let _ = node
+                                .sendto(&source, Message::Response { session, data })
                                 .await;
                         }
                     });
                 }
                 Message::Response { session, data } => {
                     if let Some((_, tx)) = sessions.remove(&session) {
-                        tx.send(data).unwrap();
+                        if let Err(e) = tx.send(data) {
+                            log::error!("handle response: {e}")
+                        }
                     } else {
-                        println!("session not found: {}", session);
+                        log::error!("session not found: {}", session);
                     }
                 }
                 Message::Started => {
                     let callback = callback.clone();
                     tokio::spawn(async move {
-                        callback.call_async::<()>("started").await.unwrap();
+                        if let Err(e) = callback.call_async::<()>("started").await {
+                            log::error!("calling started callback: {}", e)
+                        }
                     });
                 }
                 Message::Stopping => {
                     let tx = tx2.clone();
                     let callback = callback.clone();
                     tokio::spawn(async move {
-                        callback.call_async::<()>("stopping").await.unwrap();
-                        tx.clone().send(Message::Stopped).await.unwrap();
+                        if let Err(e) = callback.call_async::<()>("stopping").await {
+                            log::error!("calling stopping callback: {}", e);
+                        }
+                        if let Err(e) = tx.clone().send(Message::Stopped).await {
+                            log::error!("sending stopped message: {}", e);
+                        }
                     });
                 }
                 Message::Stopped => {
@@ -167,20 +188,22 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Service {
         }
         println!("{} Stopped", name);
         node.remove(&name);
-        callback.call_async::<()>("stopped").await.unwrap();
+        if let Err(e) = callback.call_async::<()>("stopped").await {
+            log::error!("calling {name}.stopped: {e}");
+        }
         let _lua = lua;
     });
-    tx
+    Ok(tx)
 }
 
-fn newlua(scriptname: &str) -> (Lua, LuaFunction, LuaFunction) {
+fn newlua(scriptname: &str) -> Result<(Lua, LuaFunction, LuaFunction)> {
     let lua = Lua::new();
-    let script = fs::read_to_string(scriptname).unwrap();
-    lua.load(&script).exec().unwrap();
-    let flying: LuaTable = lua.load(r#"require "flying""#).eval().unwrap();
+    let script = fs::read_to_string(scriptname)?;
+    lua.load(&script).exec()?;
+    let flying: LuaTable = lua.load(r#"require "flying""#).eval()?;
     lua_open_flying_socket(&lua, &flying);
     lua_open_flying_mongodb(&lua, &flying);
-    let init = flying.get::<LuaFunction>("on_init").unwrap();
-    let cb = flying.get::<LuaFunction>("on_event").unwrap();
-    (lua, init, cb)
+    let init = flying.get::<LuaFunction>("on_init")?;
+    let cb = flying.get::<LuaFunction>("on_event")?;
+    Ok((lua, init, cb))
 }
