@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+use anyhow::Result;
 use mlua::{BString, prelude::*};
 
 pub struct LuaTcpListener(TcpListener);
@@ -61,7 +62,7 @@ pub fn is_transient_error(e: &io::Error) -> bool {
         || e.kind() == io::ErrorKind::ConnectionReset
 }
 
-pub fn lua_open_flying_socket(lua: &Lua, flying: &LuaTable) {
+pub fn lua_open_flying_socket(lua: &Lua, flying: &LuaTable) -> Result<()> {
     let socket = lua.create_table().unwrap();
 
     let listen = lua
@@ -69,19 +70,18 @@ pub fn lua_open_flying_socket(lua: &Lua, flying: &LuaTable) {
             let addr: SocketAddr = addr.parse::<SocketAddr>()?;
             let listener = TcpListener::bind(addr).await?;
             Ok(LuaTcpListener(listener))
-        })
-        .unwrap();
+        })?;
 
     let connect = lua
         .create_async_function(|_, addr: String| async move {
             let addr: SocketAddr = addr.parse::<SocketAddr>()?;
             let stream = TcpStream::connect(addr).await?;
             Ok(LuaTcpStream(stream))
-        })
-        .unwrap();
+        })?;
 
-    socket.set("listen", listen).unwrap();
-    socket.set("connect", connect).unwrap();
+    socket.set("listen", listen)?;
+    socket.set("connect", connect)?;
 
-    flying.set("socket", socket).unwrap();
+    flying.set("socket", socket)?;
+    Ok(())
 }

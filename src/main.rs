@@ -8,12 +8,16 @@ use anyhow::Result;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing_subscriber;
+use tracing_subscriber::fmt;
 
 use crate::node::Node;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let timer = fmt::time::ChronoLocal::new("%Y-%m-%d %H:%M:%S".to_string());
     tracing_subscriber::fmt()
+        .with_timer(timer)
+        .with_target(false)
         .with_max_level(tracing::Level::INFO)
         .init();
 
