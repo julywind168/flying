@@ -1,10 +1,11 @@
+use futures::TryStreamExt;
 use mlua::prelude::*;
 use std::str::FromStr;
 
 use anyhow::Result;
 use mongodb::{
     Client, Collection, Database,
-    bson::{self, Bson, Document, oid},
+    bson::{self, Bson, Document, doc, oid},
 };
 
 struct LuaMongoClient(Client);
@@ -50,8 +51,50 @@ impl LuaUserData for LuaMongoCollection {
                 None => Ok(None),
             }
         });
-        methods.add_async_method("insert_one", |lua, this, t: LuaTable| async move {
-            let doc = tbl_to_doc(&lua, t).map_err(LuaError::external)?;
+        methods.add_async_method(
+            "find_many",
+            |lua, this, (filter, options): (Option<LuaTable>, Option<LuaTable>)| async move {
+                let f = match filter {
+                    Some(filter) => tbl_to_doc(&lua, filter).map_err(LuaError::external)?,
+                    None => doc! {},
+                };
+                let mut commond = this.0.find(f);
+                if let Some(options) = options {
+                    if let Ok(sorters) = options.get::<LuaTable>("sorters") {
+                        for i in 1..=sorters.len()? {
+                            let sorter = sorters.get::<LuaTable>(i)?;
+                            let pairs: Vec<(String, i32)> = sorter
+                                .pairs::<String, i32>()
+                                .filter_map(Result::ok)
+                                .collect();
+                            let sort_doc =
+                                pairs.into_iter().fold(Document::new(), |mut doc, (k, v)| {
+                                    doc.insert(k, v);
+                                    doc
+                                });
+                            commond = commond.sort(sort_doc);
+                        }
+                    }
+                    if let Ok(limit) = options.get::<i64>("limit") {
+                        commond = commond.limit(limit);
+                    }
+                    if let Ok(skip) = options.get::<u64>("skip") {
+                        commond = commond.skip(skip);
+                    }
+                }
+                let mut cursor = commond.await.map_err(LuaError::external)?;
+                let results = lua.create_table()?;
+                while let Some(doc) = cursor.try_next().await.map_err(LuaError::external)? {
+                    results.raw_set(
+                        results.len()? + 1,
+                        to_tbl(&lua, doc).map_err(LuaError::external)?,
+                    )?;
+                }
+                Ok(results)
+            },
+        );
+        methods.add_async_method("insert_one", |lua, this, item: LuaTable| async move {
+            let doc = tbl_to_doc(&lua, item).map_err(LuaError::external)?;
             let res = this.0.insert_one(doc).await.map_err(LuaError::external)?;
             let id = match res.inserted_id.as_object_id() {
                 Some(oid) => oid.to_string(),
@@ -59,13 +102,106 @@ impl LuaUserData for LuaMongoCollection {
             };
             Ok(id)
         });
+        methods.add_async_method("insert_many", |lua, this, items: LuaTable| async move {
+            let mut docs = vec![];
+            for i in 1..=items.len()? {
+                let item = items.get::<LuaTable>(i)?;
+                let doc = tbl_to_doc(&lua, item).map_err(LuaError::external)?;
+                docs.push(doc);
+            }
+            let insert_result = this.0.insert_many(docs).await.map_err(LuaError::external)?;
+            let mut idx = 0;
+            for id in insert_result.inserted_ids.values() {
+                idx += 1;
+                let item = items.raw_get::<LuaTable>(idx)?;
+                item.set("_id", id.to_string())?;
+            }
+            Ok(items)
+        });
+        methods.add_async_method(
+            "update_one",
+            |lua, this, (filter, update): (LuaTable, LuaTable)| async move {
+                let filter = tbl_to_doc(&lua, filter).map_err(LuaError::external)?;
+                let update = tbl_to_doc(&lua, update).map_err(LuaError::external)?;
+                let res = this
+                    .0
+                    .update_one(filter, update)
+                    .await
+                    .map_err(LuaError::external)?;
+                Ok(res.modified_count)
+            },
+        );
+        methods.add_async_method(
+            "update_many",
+            |lua, this, (filter, update): (LuaTable, LuaTable)| async move {
+                let filter = tbl_to_doc(&lua, filter).map_err(LuaError::external)?;
+                let update = tbl_to_doc(&lua, update).map_err(LuaError::external)?;
+                let res = this
+                    .0
+                    .update_many(filter, update)
+                    .await
+                    .map_err(LuaError::external)?;
+                Ok(res.modified_count)
+            },
+        );
+        methods.add_async_method(
+            "replace_one",
+            |lua, this, (filter, replacement): (LuaTable, LuaTable)| async move {
+                let filter = tbl_to_doc(&lua, filter).map_err(LuaError::external)?;
+                let replacement = tbl_to_doc(&lua, replacement).map_err(LuaError::external)?;
+                let res = this
+                    .0
+                    .replace_one(filter, replacement)
+                    .await
+                    .map_err(LuaError::external)?;
+                Ok(res.modified_count)
+            },
+        );
+        methods.add_async_method("delete_one", |lua, this, filter: LuaTable| async move {
+            let filter = tbl_to_doc(&lua, filter).map_err(LuaError::external)?;
+            let res = this
+                .0
+                .delete_one(filter)
+                .await
+                .map_err(LuaError::external)?;
+            Ok(res.deleted_count)
+        });
+        methods.add_async_method("delete_many", |lua, this, filter: LuaTable| async move {
+            let filter = tbl_to_doc(&lua, filter).map_err(LuaError::external)?;
+            let res = this
+                .0
+                .delete_many(filter)
+                .await
+                .map_err(LuaError::external)?;
+            Ok(res.deleted_count)
+        });
+        methods.add_async_method("estimated_count", |lua, this, ()| async move {
+            let res = this
+                .0
+                .estimated_document_count()
+                .await
+                .map_err(LuaError::external)?;
+            Ok(res)
+        });
+        methods.add_async_method("count", |lua, this, filter: Option<LuaTable>| async move {
+            let filter = match filter {
+                Some(filter) => tbl_to_doc(&lua, filter).map_err(LuaError::external)?,
+                None => doc! {},
+            };
+            let res = this
+                .0
+                .count_documents(filter)
+                .await
+                .map_err(LuaError::external)?;
+            Ok(res)
+        });
     }
 }
 
 pub fn lua_open_flying_mongodb(lua: &Lua, flying: &LuaTable) -> Result<()> {
     let mongodb = lua.create_table()?;
-    let connect = lua.create_async_function(async move |_, url: String| {
-        let client = mongodb::Client::with_uri_str(url)
+    let connect = lua.create_async_function(async move |_, uri: String| {
+        let client = mongodb::Client::with_uri_str(uri)
             .await
             .map_err(LuaError::external)?;
         Ok(LuaMongoClient(client))
