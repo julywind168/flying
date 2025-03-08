@@ -14,7 +14,7 @@ license = "Apache-2.0"
 
 [dependencies]
 tokio = { version = "1.43.0", features = ["full"] }
-mlua = { version = "0.10", features = ["lua54", "vendored", "async", "send"] }
+mlua = { version = "0.10", features = ["lua54", "vendored", "async", "send", "serialize"] }
 mongodb = { version = "3.2.1" }
 dashmap = "6.1.0"
 anyhow = "1.0.97"
@@ -22,4 +22,6 @@ log = "0.4.26"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["chrono"] }
 futures = "0.3.31"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 # chrono = "0.4.40"

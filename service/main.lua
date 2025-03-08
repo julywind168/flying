@@ -6,6 +6,7 @@ function main:started()
     flying.info("main started")
     flying.spawn("echo", "service/echo.lua")
 
+    -- flying.spawn("test_json", "service/test/json.lua")
     -- flying.spawn("test_mongo", "service/test/mongo.lua");
     -- flying.spawn("benchmark", "service/benchmark/init.lua")
 end

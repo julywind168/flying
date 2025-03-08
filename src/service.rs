@@ -1,5 +1,5 @@
 use crate::{
-    flying::{mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket},
+    flying::{json::lua_open_flying_json, mongodb::lua_open_flying_mongodb, socket::lua_open_flying_socket},
     message::Message,
     node::Node,
 };
@@ -198,11 +198,12 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Result<Se
 
 fn newlua(scriptname: &str) -> Result<(Lua, LuaFunction, LuaFunction)> {
     let lua = Lua::new();
-    let script = fs::read_to_string(scriptname)?;
-    lua.load(&script).exec()?;
     let flying: LuaTable = load_lua_flying(&lua)?;
     lua_open_flying_socket(&lua, &flying)?;
     lua_open_flying_mongodb(&lua, &flying)?;
+    lua_open_flying_json(&lua, &flying)?;
+    let script = fs::read_to_string(scriptname)?;
+    lua.load(&script).exec()?;
     let init = flying.get::<LuaFunction>("on_init")?;
     let cb = flying.get::<LuaFunction>("on_event")?;
     Ok((lua, init, cb))
