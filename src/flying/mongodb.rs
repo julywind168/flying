@@ -175,7 +175,7 @@ impl LuaUserData for LuaMongoCollection {
                 .map_err(LuaError::external)?;
             Ok(res.deleted_count)
         });
-        methods.add_async_method("estimated_count", |lua, this, ()| async move {
+        methods.add_async_method("estimated_count", |_, this, ()| async move {
             let res = this
                 .0
                 .estimated_document_count()

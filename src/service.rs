@@ -32,6 +32,26 @@ mod tests {
 
 impl LuaUserData for LuaFlying {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("error", |_, _, msg:String| {
+            log::error!("{}", msg);
+            Ok(())
+        });
+        methods.add_method("warn", |_, _, msg:String| {
+            log::warn!("{}", msg);
+            Ok(())
+        });
+        methods.add_method("info", |_, _, msg:String| {
+            log::info!("{}", msg);
+            Ok(())
+        });
+        methods.add_method("debug", |_, _, msg:String| {
+            log::debug!("{}", msg);
+            Ok(())
+        });
+        methods.add_method("trace", |_, _, msg:String| {
+            log::trace!("{}", msg);
+            Ok(())
+        });
         methods.add_method("nodename", |_, this, ()| Ok(this.node.name.clone()));
         methods.add_method("name", |_, this, ()| Ok(this.name.clone()));
         methods.add_method("scriptname", |_, this, ()| Ok(this.scriptname.clone()));
@@ -198,7 +218,7 @@ pub async fn new(name: String, scriptname: String, node: Arc<Node>) -> Result<Se
 
 fn newlua(scriptname: &str) -> Result<(Lua, LuaFunction, LuaFunction)> {
     let lua = Lua::new();
-    let flying: LuaTable = load_lua_flying(&lua)?;
+    let flying: LuaTable = lua.load(r#"require "flying""#).eval()?;
     lua_open_flying_socket(&lua, &flying)?;
     lua_open_flying_mongodb(&lua, &flying)?;
     lua_open_flying_json(&lua, &flying)?;
@@ -207,36 +227,4 @@ fn newlua(scriptname: &str) -> Result<(Lua, LuaFunction, LuaFunction)> {
     let init = flying.get::<LuaFunction>("on_init")?;
     let cb = flying.get::<LuaFunction>("on_event")?;
     Ok((lua, init, cb))
-}
-
-fn load_lua_flying(lua: &Lua) -> Result<LuaTable> {
-    let flying: LuaTable = lua.load(r#"require "flying""#).eval()?;
-    let info = lua.create_function(|_, msg: String| {
-        log::info!("{}", msg);
-        Ok(())
-    })?;
-    let warn = lua.create_function(|_, msg: String| {
-        log::warn!("{}", msg);
-        Ok(())
-    })?;
-    let error = lua.create_function(|_, msg: String| {
-        log::error!("{}", msg);
-        Ok(())
-    })?;
-    let debug = lua.create_function(|_, msg: String| {
-        log::debug!("{}", msg);
-        Ok(())
-    })?;
-    let trace = lua.create_function(|_, msg: String| {
-        log::trace!("{}", msg);
-        Ok(())
-    })?;
-
-    flying.set("info", info)?;
-    flying.set("warn", warn)?;
-    flying.set("error", error)?;
-    flying.set("debug", debug)?;
-    flying.set("trace", trace)?;
-
-    Ok(flying)
 }
