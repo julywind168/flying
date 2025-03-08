@@ -21,6 +21,7 @@ local function log_msg(...)
             list[index] = tostring(value)
         end
     end
+    table.insert(list, 1, ("[%s]"):format(flying.name()))
     return table.concat(list, " ")
 end
 
