@@ -9,12 +9,18 @@ pub fn lua_open_flying_json(lua: &Lua, flying: &LuaTable) -> Result<()> {
         Ok(json)
     })?;
 
+    let encode_pretty = lua.create_function(|_, v: LuaValue| {
+        let json = serde_json::to_string_pretty(&v).map_err(LuaError::external)?;
+        Ok(json)
+    })?;
+
     let decode = lua.create_function(|lua, v: String| {
         let val: serde_json::Value = serde_json::from_str(&v).map_err(LuaError::external)?;
         Ok(lua.to_value(&val).map_err(LuaError::external)?)
     })?;
 
     json.set("encode", encode)?;
+    json.set("encode_pretty", encode_pretty)?;
     json.set("decode", decode)?;
     flying.set("json", json)?;
     Ok(())

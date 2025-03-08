@@ -8,10 +8,7 @@ function test:started()
     local s = json.encode(t)
     flying.info("json string: " .. s)
     local t2 = json.decode(s)
-
-    for key, value in pairs(t2) do
-        flying.info(("%s = %s"):format(key, value))
-    end
+    flying.info("json object: " .. json.encode_pretty(t2))
 end
 
 flying.start(test)
