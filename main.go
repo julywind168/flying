@@ -55,7 +55,7 @@ type IServiceState interface {
 type IService interface {
 	Node
 	Started()
-	Tick(dt time.Duration)
+	Tick()
 	Handler()
 	Stopped()
 }
@@ -89,11 +89,9 @@ type BaseNode struct {
 
 type Service[T IServiceState] struct {
 	BaseNode
-	Timer        Timer
-	State        T
-	StartTime    time.Time
-	LastTickTime time.Time
-	Exited       bool
+	Timer  Timer
+	State  T
+	Exited bool
 }
 
 type ServiceCtx interface {
@@ -137,9 +135,7 @@ func NewService[T IServiceState](name string, tickInterval time.Duration, state 
 			Interval: tickInterval,
 			Elapsed:  0,
 		},
-		State:        state,
-		StartTime:    time.Now(),
-		LastTickTime: time.Now(),
+		State: state,
 	}
 }
 
@@ -147,8 +143,8 @@ func (s *Service[T]) Started() {
 	s.State.Started(s.getCtx())
 }
 
-func (s *Service[T]) Tick(dt time.Duration) {
-	s.State.Tick(s.getCtx(), dt)
+func (s *Service[T]) Tick() {
+	s.State.Tick(s.getCtx(), s.Timer.Interval)
 }
 
 func (s *Service[T]) Handler() {
@@ -273,10 +269,7 @@ func (w *World) doEvent(s *Service[IServiceState], e Event) {
 		case EventTypeStarted:
 			s.Started()
 		case EventTypeTick:
-			now := time.Now()
-			dt := now.Sub(s.LastTickTime)
-			s.LastTickTime = now
-			s.Tick(dt)
+			s.Tick()
 		case EventTypeClientReq:
 			s.Handler()
 		}
@@ -285,6 +278,25 @@ func (w *World) doEvent(s *Service[IServiceState], e Event) {
 			WaitUnlock: group,
 		}
 	}()
+}
+
+func (w *World) tryDispatchPendingEvents() {
+	for e := w.events.Front(); e != nil; e = e.Next() {
+		event := e.Value.(Event)
+		if s, exist := w.services[event.To]; exist {
+			if s.IsReady() && event.IsReady() {
+				w.events.Remove(e)
+				w.doEvent(s, event)
+				w.tryDispatchPendingEvents()
+			} else {
+				continue
+			}
+		} else {
+			w.events.Remove(e)
+			log.Printf("Service<%s> does not exist, event %+v discarded", event.To, event)
+			w.tryDispatchPendingEvents()
+		}
+	}
 }
 
 func (w *World) tick(dt time.Duration) {
@@ -356,6 +368,7 @@ func (w *World) Start() {
 					delete(w.services, c.Service.ID())
 					log.Printf("Service<%s> exited", c.Service.ID())
 				}
+				w.tryDispatchPendingEvents()
 			case CommandShutdown:
 				close(w.stopTimerChan)
 				close(c.ok)
