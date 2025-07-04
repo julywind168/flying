@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"log"
+	"reflect"
 	"time"
 )
 
@@ -56,6 +57,7 @@ type IService interface {
 	Node
 	Started()
 	Tick()
+	Message(from string, msg Message)
 	Handler()
 	Stopped()
 }
@@ -65,8 +67,14 @@ type EventType uint8
 const (
 	EventTypeStarted EventType = iota
 	EventTypeTick
+	EventTypeMessage // message from other service
 	EventTypeClientReq
 )
+
+type Message struct {
+	Name   string
+	Params any
+}
 
 type Event struct {
 	BaseNode
@@ -89,6 +97,7 @@ type BaseNode struct {
 
 type Service[T IServiceState] struct {
 	BaseNode
+	World  *World
 	Timer  Timer
 	State  T
 	Exited bool
@@ -97,11 +106,13 @@ type Service[T IServiceState] struct {
 type ServiceCtx interface {
 	self() string
 	exit()
+	send(to string, name string, params any)
 }
 
 type internalServiceCtx struct {
 	selfFunc func() string
 	exitFunc func()
+	sendFunc func(to string, name string, params any)
 }
 
 func (c *internalServiceCtx) self() string {
@@ -110,6 +121,10 @@ func (c *internalServiceCtx) self() string {
 
 func (c *internalServiceCtx) exit() {
 	c.exitFunc()
+}
+
+func (c *internalServiceCtx) send(to string, name string, params any) {
+	c.sendFunc(to, name, params)
 }
 
 func (s *Service[T]) getCtx() ServiceCtx {
@@ -121,21 +136,23 @@ func (s *Service[T]) getCtx() ServiceCtx {
 				s.Stopped()
 			}
 		},
+		sendFunc: func(to string, name string, params any) {
+			s.send(to, name, params)
+		},
 	}
 }
 
-func NewService[T IServiceState](name string, tickInterval time.Duration, state T) *Service[IServiceState] {
-	if tickInterval < SERVICE_MIN_TICK_DURATION {
-		log.Panicf("Service tick interval cannot be less than %v", SERVICE_MIN_TICK_DURATION)
-	}
-
-	return &Service[IServiceState]{
-		BaseNode: *NewBaseNode(name),
-		Timer: Timer{
-			Interval: tickInterval,
-			Elapsed:  0,
+func (s *Service[T]) send(to string, name string, params any) {
+	s.World.commands <- CommandFireEvent{
+		Event: Event{
+			From: s.ID(),
+			To:   to,
+			Type: EventTypeMessage,
+			Playload: Message{
+				Name:   name,
+				Params: params,
+			},
 		},
-		State: state,
 	}
 }
 
@@ -145,6 +162,30 @@ func (s *Service[T]) Started() {
 
 func (s *Service[T]) Tick() {
 	s.State.Tick(s.getCtx(), s.Timer.Interval)
+}
+
+func (s *Service[T]) Message(from string, msg Message) {
+	v := reflect.ValueOf(s.State)
+	methodVal := v.MethodByName(msg.Name)
+	if !methodVal.IsValid() {
+		log.Printf("Service %s does not have a method called %s", s.ID(), msg.Name)
+		return
+	}
+
+	ctx := s.getCtx()
+
+	args := []reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(from),
+		reflect.ValueOf(msg.Params),
+	}
+
+	if methodVal.Type().NumIn() != 3 || !reflect.TypeOf(msg.Params).AssignableTo(methodVal.Type().In(2)) {
+		log.Printf("Service %s method %s does not have the correct signature", s.ID(), msg.Name)
+		return
+	}
+
+	methodVal.Call(args)
 }
 
 func (s *Service[T]) Handler() {
@@ -237,20 +278,29 @@ type World struct {
 	stopTimerChan chan struct{}
 }
 
-func NewWorld(services ...*Service[IServiceState]) *World {
-	svcMap := make(map[string]*Service[IServiceState])
-	for _, svc := range services {
-		svcMap[svc.ID()] = svc
-	}
+func NewWorld() *World {
 	return &World{
-		services:      svcMap,
+		services:      make(map[string]*Service[IServiceState]),
 		commands:      make(chan any, 1024),
 		events:        list.New(),
 		stopTimerChan: make(chan struct{}),
 	}
 }
 
-func (w *World) AddService(service *Service[IServiceState]) {
+func Spawn[T IServiceState](w *World, name string, tickInterval time.Duration, state T) {
+	if tickInterval < SERVICE_MIN_TICK_DURATION {
+		log.Panicf("Service tick interval cannot be less than %v", SERVICE_MIN_TICK_DURATION)
+	}
+	service := &Service[IServiceState]{
+		BaseNode: *NewBaseNode(name),
+		World:    w,
+		Timer: Timer{
+			Interval: tickInterval,
+			Elapsed:  0,
+		},
+		State: state,
+	}
+
 	w.commands <- CommandAddService{service}
 	w.commands <- CommandFireEvent{Event{
 		From: "",
@@ -270,6 +320,8 @@ func (w *World) doEvent(s *Service[IServiceState], e Event) {
 			s.Started()
 		case EventTypeTick:
 			s.Tick()
+		case EventTypeMessage:
+			s.Message(e.From, e.Playload.(Message))
 		case EventTypeClientReq:
 			s.Handler()
 		}
@@ -391,21 +443,28 @@ type Agent struct {
 
 func (a *Agent) Started(ctx ServiceCtx) {
 	fmt.Printf("Agent %s started\n", a.ID)
-	if ctx.self() == "Agent.1" {
-		ctx.exit()
-	}
 }
 func (a *Agent) Stopped(ctx ServiceCtx) {}
 func (a *Agent) Tick(ctx ServiceCtx, dt time.Duration) {
 	fmt.Printf("Agent %s tick, dt: %+v\n", a.ID, dt)
+	if a.ID == "2" {
+		ctx.send("Agent.1", "Ping", PingPayload{Msg: "hello world"})
+	}
 }
 func (a *Agent) Handler(ctx ServiceCtx) {}
 
+type PingPayload struct {
+	Msg string
+}
+
+func (a *Agent) Ping(ctx ServiceCtx, from string, payload PingPayload) {
+	fmt.Printf("Agent %s ping from %s, payload: %+v\n", a.ID, from, payload.Msg)
+}
+
 func main() {
-	world := NewWorld(
-		NewService("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"}),
-		NewService("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"}),
-	)
+	world := NewWorld()
+	Spawn(world, "Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
+	Spawn(world, "Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
 	world.Start()
 	time.Sleep(time.Second * 3)
 	world.Stop()
