@@ -58,7 +58,7 @@ type IService interface {
 	Started()
 	Tick()
 	Message(from string, msg Message)
-	Handler()
+	Handler(session ISession, msg Message)
 	Stopped()
 }
 
@@ -74,6 +74,12 @@ const (
 type Message struct {
 	Name   string
 	Params any
+}
+
+type ISession interface {
+	Node
+	Response(result any)
+	Push(name string, params any)
 }
 
 type Event struct {
@@ -166,8 +172,8 @@ func (s *Service[T]) Tick() {
 
 func (s *Service[T]) Message(from string, msg Message) {
 	v := reflect.ValueOf(s.State)
-	methodVal := v.MethodByName(msg.Name)
-	if !methodVal.IsValid() {
+	method := v.MethodByName(msg.Name)
+	if !method.IsValid() {
 		log.Printf("Service %s does not have a method called %s", s.ID(), msg.Name)
 		return
 	}
@@ -180,16 +186,36 @@ func (s *Service[T]) Message(from string, msg Message) {
 		reflect.ValueOf(msg.Params),
 	}
 
-	if methodVal.Type().NumIn() != 3 || !reflect.TypeOf(msg.Params).AssignableTo(methodVal.Type().In(2)) {
+	if method.Type().NumIn() != 3 || !reflect.TypeOf(msg.Params).AssignableTo(method.Type().In(2)) {
 		log.Printf("Service %s method %s does not have the correct signature", s.ID(), msg.Name)
 		return
 	}
 
-	methodVal.Call(args)
+	method.Call(args)
 }
 
-func (s *Service[T]) Handler() {
-	s.State.Handler(s.getCtx())
+func (s *Service[T]) Handler(session ISession, msg Message) {
+	v := reflect.ValueOf(s.State)
+	method := v.MethodByName(msg.Name)
+	if !method.IsValid() {
+		log.Printf("Service %s does not have a method called %s", s.ID(), msg.Name)
+		return
+	}
+
+	ctx := s.getCtx()
+
+	args := []reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(session),
+		reflect.ValueOf(msg.Params),
+	}
+
+	if method.Type().NumIn() != 3 || !reflect.TypeOf(msg.Params).AssignableTo(method.Type().In(2)) {
+		log.Printf("Service %s method %s does not have the correct signature", s.ID(), msg.Name)
+		return
+	}
+
+	method.Call(args)
 }
 
 func (s *Service[T]) Stopped() {
@@ -327,7 +353,8 @@ func (w *World) doEvent(s *Service[IServiceState], e Event) {
 		case EventTypeMessage:
 			s.Message(e.From, e.Playload.(Message))
 		case EventTypeClientReq:
-			s.Handler()
+			session := e.Children()[0].(ISession)
+			s.Handler(session, e.Playload.(Message))
 		}
 		w.commands <- CommandEventDone{
 			Service:    s,
@@ -366,6 +393,23 @@ func (w *World) tick(dt time.Duration) {
 				},
 			}
 		}
+	}
+}
+
+func (w *World) PushClientRequest(to string, session IService, msg Message) {
+	w.commands <- CommandFireEvent{
+		Event{
+			BaseNode: BaseNode{
+				children: []Node{session},
+			},
+			From: "",
+			To:   to,
+			Type: EventTypeClientReq,
+			Playload: Message{
+				Name:   msg.Name,
+				Params: msg.Params,
+			},
+		},
 	}
 }
 
