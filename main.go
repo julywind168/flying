@@ -96,7 +96,7 @@ type State[T any] struct {
 }
 
 type BaseNode struct {
-	name     string
+	id       string
 	locked   bool
 	children []Node
 }
@@ -224,15 +224,15 @@ func (s *Service[T]) Stopped() {
 
 var _ IService = (*Service[IServiceState])(nil)
 
-func NewBaseNode(name string) *BaseNode {
+func NewBaseNode(id string) *BaseNode {
 	return &BaseNode{
-		name:     name,
+		id:       id,
 		children: make([]Node, 0),
 	}
 }
 
 func (n *BaseNode) ID() string {
-	return n.name
+	return n.id
 }
 
 func (n *BaseNode) AddChild(child Node) {
@@ -317,12 +317,12 @@ func NewWorld() *World {
 	}
 }
 
-func Spawn[T IServiceState](w *World, name string, tickInterval time.Duration, state T) {
+func Spawn[T IServiceState](w *World, id string, tickInterval time.Duration, state T) {
 	if tickInterval < SERVICE_MIN_TICK_DURATION {
 		log.Panicf("Service tick interval cannot be less than %v", SERVICE_MIN_TICK_DURATION)
 	}
 	service := &Service[IServiceState]{
-		BaseNode: *NewBaseNode(name),
+		BaseNode: *NewBaseNode(id),
 		World:    w,
 		Timer: Timer{
 			Interval: tickInterval,
