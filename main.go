@@ -258,6 +258,10 @@ type CommandAddService struct {
 	Service *Service[IServiceState]
 }
 
+type CommandTick struct {
+	Delta time.Duration
+}
+
 type CommandFireEvent struct {
 	Event Event
 }
@@ -393,7 +397,7 @@ func (w *World) Start() {
 				now := time.Now()
 				dt = now.Sub(last)
 				last = now
-				w.tick(dt)
+				w.commands <- CommandTick{Delta: dt}
 			}
 		}()
 
@@ -402,6 +406,8 @@ func (w *World) Start() {
 			switch c := cmd.(type) {
 			case CommandAddService:
 				w.services[c.Service.ID()] = c.Service
+			case CommandTick:
+				w.tick(c.Delta)
 			case CommandFireEvent:
 				if service, exist := w.services[c.Event.To]; exist {
 					if service.IsReady() && c.Event.IsReady() {
