@@ -371,16 +371,6 @@ func (w *World) tick(dt time.Duration) {
 
 func (w *World) Start() {
 	go func() {
-		go func() {
-			for id := range w.services {
-				w.commands <- CommandFireEvent{Event{
-					From: "",
-					To:   id,
-					Type: EventTypeStarted,
-				}}
-			}
-		}()
-
 		// timer thread
 		go func() {
 			var (
