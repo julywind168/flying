@@ -43,7 +43,7 @@ func main() {
 	world.Start()
 	world.FireClientRequest("Agent.1", &server.Session{
 		BaseNode: *flying.NewBaseNode("Session.1"),
-	}, flying.Message{Name: "Heartbeat", Params: 1})
+	}, "Heartbeat", 1)
 	time.Sleep(time.Second * 3)
 	world.Stop()
 }

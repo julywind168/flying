@@ -126,7 +126,7 @@ func (w *World) tick(dt time.Duration) {
 	}
 }
 
-func (w *World) FireClientRequest(to string, session ISession, msg Message) {
+func (w *World) FireClientRequest(to string, session ISession, name string, params any) {
 	w.commands <- commandFireEvent{
 		Event{
 			BaseNode: BaseNode{
@@ -136,8 +136,8 @@ func (w *World) FireClientRequest(to string, session ISession, msg Message) {
 			To:   to,
 			Type: EventTypeClientReq,
 			Playload: Message{
-				Name:   msg.Name,
-				Params: msg.Params,
+				Name:   name,
+				Params: params,
 			},
 		},
 	}

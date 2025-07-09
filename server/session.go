@@ -22,13 +22,17 @@ type Packet struct {
 	Type    PacketType
 	Session uint32 // request ID
 	Name    string // method name
-	Payload any
+	Payload []byte
 }
 
-type Conn interface {
+type IPeer interface {
 	ID() string
+	Address() string
 	IsConnected() bool
 	Write(msg []byte)
+	Verified(session *Session)
+	IsVerified() *Session
+	Close()
 }
 
 type PkgCacheItem struct {
@@ -38,7 +42,8 @@ type PkgCacheItem struct {
 
 type Session struct {
 	flying.BaseNode
-	conn     Conn
+	agent    string // session agent service name
+	peer     IPeer
 	packet   Packet // current request packet
 	request  bool
 	index    uint32 // server send packet index (start from 1)
@@ -57,7 +62,7 @@ func (s *Session) send(packet Packet) {
 		if s.pkgCache.Len() > PKG_CACHE_SIZE {
 			s.pkgCache.PopFront()
 		}
-		s.conn.Write(bytes)
+		s.peer.Write(bytes)
 	} else {
 		Sugar.Errorf("packet %+v marshal error\n", packet)
 	}
@@ -65,12 +70,13 @@ func (s *Session) send(packet Packet) {
 
 func (s *Session) Response(result any) {
 	if s.request {
+		payload, _ := json.Marshal(result)
 		s.send(Packet{
 			Service: "",
 			Type:    PacketTypeResponse,
 			Session: s.packet.Session,
 			Name:    s.packet.Name,
-			Payload: result,
+			Payload: payload,
 		})
 		s.request = false
 		s.packet = Packet{}
@@ -96,7 +102,7 @@ func (a *SessionAgent) Request(ctx flying.ServiceCtx, session *Session, packet P
 		}
 		session.packet = packet
 		session.request = true
-		ctx.FireClientRequest(packet.Service, session, flying.Message{Name: packet.Name, Params: packet.Payload})
+		ctx.FireClientRequest(packet.Service, session, packet.Name, packet.Payload)
 	} else {
 		Sugar.Errorln("This example doesn't support request client")
 	}

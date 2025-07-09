@@ -43,14 +43,14 @@ type ServiceCtx interface {
 	Self() string
 	Exit()
 	Send(to string, name string, params any)
-	FireClientRequest(to string, session ISession, msg Message)
+	FireClientRequest(to string, session ISession, name string, params any)
 }
 
 type internalServiceCtx struct {
 	selfFunc              func() string
 	exitFunc              func()
 	sendFunc              func(to string, name string, params any)
-	fireClientRequestFunc func(to string, session ISession, msg Message)
+	fireClientRequestFunc func(to string, session ISession, name string, params any)
 }
 
 func (c *internalServiceCtx) Self() string {
@@ -65,8 +65,8 @@ func (c *internalServiceCtx) Send(to string, name string, params any) {
 	c.sendFunc(to, name, params)
 }
 
-func (c *internalServiceCtx) FireClientRequest(to string, session ISession, msg Message) {
-	c.fireClientRequestFunc(to, session, msg)
+func (c *internalServiceCtx) FireClientRequest(to string, session ISession, name string, params any) {
+	c.fireClientRequestFunc(to, session, name, params)
 }
 
 func (s *Service[T]) getCtx() ServiceCtx {
@@ -81,8 +81,8 @@ func (s *Service[T]) getCtx() ServiceCtx {
 		sendFunc: func(to string, name string, params any) {
 			s.send(to, name, params)
 		},
-		fireClientRequestFunc: func(to string, session ISession, msg Message) {
-			s.World.FireClientRequest(to, session, msg)
+		fireClientRequestFunc: func(to string, session ISession, name string, params any) {
+			s.World.FireClientRequest(to, session, name, params)
 		},
 	}
 }
