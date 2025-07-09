@@ -43,12 +43,14 @@ type ServiceCtx interface {
 	Self() string
 	Exit()
 	Send(to string, name string, params any)
+	FireClientRequest(to string, session ISession, msg Message)
 }
 
 type internalServiceCtx struct {
-	selfFunc func() string
-	exitFunc func()
-	sendFunc func(to string, name string, params any)
+	selfFunc              func() string
+	exitFunc              func()
+	sendFunc              func(to string, name string, params any)
+	fireClientRequestFunc func(to string, session ISession, msg Message)
 }
 
 func (c *internalServiceCtx) Self() string {
@@ -63,6 +65,10 @@ func (c *internalServiceCtx) Send(to string, name string, params any) {
 	c.sendFunc(to, name, params)
 }
 
+func (c *internalServiceCtx) FireClientRequest(to string, session ISession, msg Message) {
+	c.fireClientRequestFunc(to, session, msg)
+}
+
 func (s *Service[T]) getCtx() ServiceCtx {
 	return &internalServiceCtx{
 		selfFunc: s.ID,
@@ -75,21 +81,14 @@ func (s *Service[T]) getCtx() ServiceCtx {
 		sendFunc: func(to string, name string, params any) {
 			s.send(to, name, params)
 		},
+		fireClientRequestFunc: func(to string, session ISession, msg Message) {
+			s.World.FireClientRequest(to, session, msg)
+		},
 	}
 }
 
 func (s *Service[T]) send(to string, name string, params any) {
-	s.World.commands <- commandFireEvent{
-		event: Event{
-			From: s.ID(),
-			To:   to,
-			Type: EventTypeMessage,
-			Playload: Message{
-				Name:   name,
-				Params: params,
-			},
-		},
-	}
+	s.World.FireServiceMessage(s.ID(), to, name, params)
 }
 
 func (s *Service[T]) Started() {

@@ -126,7 +126,7 @@ func (w *World) tick(dt time.Duration) {
 	}
 }
 
-func (w *World) PushClientRequest(to string, session ISession, msg Message) {
+func (w *World) FireClientRequest(to string, session ISession, msg Message) {
 	w.commands <- commandFireEvent{
 		Event{
 			BaseNode: BaseNode{
@@ -138,6 +138,20 @@ func (w *World) PushClientRequest(to string, session ISession, msg Message) {
 			Playload: Message{
 				Name:   msg.Name,
 				Params: msg.Params,
+			},
+		},
+	}
+}
+
+func (w *World) FireServiceMessage(from string, to string, name string, params any) {
+	w.commands <- commandFireEvent{
+		event: Event{
+			From: from,
+			To:   to,
+			Type: EventTypeMessage,
+			Playload: Message{
+				Name:   name,
+				Params: params,
 			},
 		},
 	}
