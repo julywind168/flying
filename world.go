@@ -47,7 +47,7 @@ func NewWorld() *World {
 	}
 }
 
-func Spawn[T UService](w *World, id string, tickInterval time.Duration, state T) {
+func (w *World) Spawn(id string, tickInterval time.Duration, state UService) {
 	if tickInterval < SERVICE_MIN_TICK_DURATION {
 		log.Panicf("Service tick interval cannot be less than %v", SERVICE_MIN_TICK_DURATION)
 	}

@@ -40,6 +40,7 @@ type Service[T UService] struct {
 	Exited bool
 }
 type ServiceCtx interface {
+	Spawn(id string, tickInterval time.Duration, state UService)
 	Self() string
 	Exit()
 	Send(to string, name string, params any)
@@ -47,10 +48,15 @@ type ServiceCtx interface {
 }
 
 type internalServiceCtx struct {
+	spawnFunc             func(id string, tickInterval time.Duration, state UService)
 	selfFunc              func() string
 	exitFunc              func()
 	sendFunc              func(to string, name string, params any)
 	fireClientRequestFunc func(to string, session ISession, name string, params any)
+}
+
+func (c *internalServiceCtx) Spawn(id string, tickInterval time.Duration, state UService) {
+	c.spawnFunc(id, tickInterval, state)
 }
 
 func (c *internalServiceCtx) Self() string {
@@ -71,7 +77,8 @@ func (c *internalServiceCtx) FireClientRequest(to string, session ISession, name
 
 func (s *Service[T]) getCtx() ServiceCtx {
 	return &internalServiceCtx{
-		selfFunc: s.ID,
+		spawnFunc: s.World.Spawn,
+		selfFunc:  s.ID,
 		exitFunc: func() {
 			if !s.Exited {
 				s.Exited = true

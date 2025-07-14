@@ -38,8 +38,8 @@ func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.Session, payloa
 
 func main() {
 	world := flying.NewWorld()
-	flying.Spawn(world, "Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
-	flying.Spawn(world, "Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
+	world.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
+	world.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
 	world.Start()
 	world.FireClientRequest("Agent.1", &server.Session{
 		BaseNode: *flying.NewBaseNode("Session.1"),
