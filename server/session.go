@@ -8,7 +8,7 @@ import (
 	"github.com/julywind168/flying"
 )
 
-const PKG_CACHE_SIZE = 128
+const PKT_CACHE_SIZE = 128
 
 type PacketType uint8
 
@@ -35,7 +35,7 @@ type IPeer interface {
 	Close()
 }
 
-type PkgCacheItem struct {
+type PktCacheItem struct {
 	index  uint32
 	packge []byte
 }
@@ -47,7 +47,7 @@ type Session struct {
 	packet   Packet // current request packet
 	request  bool
 	index    uint32 // server send packet index (start from 1)
-	pkgCache deque.Deque[PkgCacheItem]
+	pktCache deque.Deque[PktCacheItem]
 }
 
 var _ flying.ISession = (*Session)(nil)
@@ -55,12 +55,12 @@ var _ flying.ISession = (*Session)(nil)
 func (s *Session) send(packet Packet) {
 	if bytes, _ := json.Marshal(packet); bytes != nil {
 		s.index++
-		s.pkgCache.PushBack(PkgCacheItem{
+		s.pktCache.PushBack(PktCacheItem{
 			index:  s.index,
 			packge: bytes,
 		})
-		if s.pkgCache.Len() > PKG_CACHE_SIZE {
-			s.pkgCache.PopFront()
+		if s.pktCache.Len() > PKT_CACHE_SIZE {
+			s.pktCache.PopFront()
 		}
 		s.peer.Write(bytes)
 	} else {
