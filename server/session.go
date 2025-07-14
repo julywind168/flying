@@ -85,7 +85,14 @@ func (s *Session) Response(result any) {
 	}
 }
 
-func (s *Session) Push(name string, params any) {
+func (s *Session) Push(name string, payload any) {
+	data, _ := json.Marshal(payload)
+	s.send(Packet{
+		Type:    PacketTypeRequest,
+		Session: 0,
+		Name:    name,
+		Payload: data,
+	})
 }
 
 type SessionAgent struct{}

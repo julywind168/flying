@@ -84,7 +84,7 @@ func (w *World) doEvent(s *Service[UService], e Event) {
 			s.Message(e.From, e.Playload.(Message))
 		case EventTypeClientReq:
 			session := e.Children()[0].(ISession)
-			s.Handler(session, e.Playload.(Message))
+			s.Handler(session, e.Playload.(Request))
 		}
 		w.commands <- commandEventDone{
 			service:    s,
@@ -126,7 +126,7 @@ func (w *World) tick(dt time.Duration) {
 	}
 }
 
-func (w *World) FireClientRequest(to string, session ISession, name string, params any) {
+func (w *World) FireClientRequest(to string, session ISession, name string, params []byte) {
 	w.commands <- commandFireEvent{
 		Event{
 			BaseNode: BaseNode{
@@ -135,7 +135,7 @@ func (w *World) FireClientRequest(to string, session ISession, name string, para
 			From: "",
 			To:   to,
 			Type: EventTypeClientReq,
-			Playload: Message{
+			Playload: Request{
 				Name:   name,
 				Params: params,
 			},

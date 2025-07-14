@@ -1,8 +1,6 @@
 package server
 
 import (
-	"encoding/json"
-
 	"github.com/julywind168/flying"
 )
 
@@ -27,14 +25,8 @@ func (app *App) OnConnect(peer IPeer) {
 }
 
 func (app *App) OnMessage(peer IPeer, msg []byte) {
-	packet := &Packet{}
-	if err := json.Unmarshal(msg, &packet); err != nil {
-		Sugar.Errorf("Invalid client, failed to unmarshal message: %v\n", err)
-		peer.Close()
-		return
-	}
 	if session := peer.IsVerified(); session != nil {
-		app.World.FireClientRequest(session.agent, session, "Request", packet)
+		app.World.FireClientRequest(session.agent, session, "Request", msg)
 	} else {
 		if session := app.verify(peer, msg); session != nil {
 			peer.Verified(session)

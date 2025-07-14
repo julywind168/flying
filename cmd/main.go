@@ -29,7 +29,7 @@ type PingPayload struct {
 }
 
 func (a *Agent) Ping(ctx flying.ServiceCtx, from string, payload PingPayload) {
-	fmt.Printf("Agent %s ping from %s, payload: %+v\n", a.ID, from, payload.Msg)
+	fmt.Printf("Agent %s ping from %s, payload: %+v\n", a.ID, from, payload)
 }
 
 func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.Session, payload any) {
@@ -43,7 +43,7 @@ func main() {
 	world.Start()
 	world.FireClientRequest("Agent.1", &server.Session{
 		BaseNode: *flying.NewBaseNode("Session.1"),
-	}, "Heartbeat", 1)
+	}, "Heartbeat", []byte{})
 	time.Sleep(time.Second * 3)
 	world.Stop()
 }
