@@ -7,8 +7,9 @@ import (
 )
 
 type WsPeer struct {
-	conn    *websocket.Conn
-	session *server.Session
+	conn      *websocket.Conn
+	session   *server.Session
+	connected bool
 }
 
 func (p *WsPeer) ID() string {
@@ -20,7 +21,7 @@ func (p *WsPeer) Address() string {
 }
 
 func (p *WsPeer) IsConnected() bool {
-	return p.conn != nil && p.conn.IsClientConn()
+	return p.connected
 }
 
 func (p *WsPeer) Write(msg []byte) {
@@ -65,13 +66,15 @@ func (g *WsGate) Start(handler server.IGateHandler) {
 			websocket.Handler(func(ws *websocket.Conn) {
 				defer ws.Close()
 				peer := &WsPeer{
-					conn: ws,
+					conn:      ws,
+					connected: true,
 				}
 				handler.OnConnect(peer)
 				for {
 					var msg []byte
 					err := websocket.Message.Receive(ws, &msg)
 					if err != nil {
+						peer.connected = false
 						handler.OnDisconnect(peer)
 						break
 					}
