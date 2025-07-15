@@ -1,9 +1,12 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/julywind168/flying"
 )
@@ -35,23 +38,31 @@ func NewApp() *App {
 	return app
 }
 
-func (app *App) verify(peer IPeer, msg []byte) *Session {
-	return nil
+type Authorization struct {
+	Token string
 }
 
-func (app *App) onConnect(peer IPeer) {
+func (app *App) verify(peer IPeer, msg []byte) (bool, *Session) {
+	var auth Authorization
+	if err := json.Unmarshal(msg, &auth); err == nil {
+		uid := "1" // TODO: fix it
+		agent := fmt.Sprintf("SessionAgent.%s", uid)
+		app.World.Spawn(agent, 10*time.Second, &SessionAgent{})
+		return true, NewSession(uid, agent, peer)
+	} else {
+		return false, nil
+	}
+}
+
+func (app *App) handlePeerConnect(peer IPeer) {
 	Sugar.Infof("Connected from %s\n", peer.Address())
 }
 
-func (app *App) OnConnect(peer IPeer) {
-	app.events <- GateEventConnect{Peer: peer}
-}
-
-func (app *App) onMessage(peer IPeer, msg []byte) {
+func (app *App) handlePeerMessage(peer IPeer, msg []byte) {
 	if session := peer.IsVerified(); session != nil {
 		app.World.FireClientRequest(session.agent, session, "Request", msg)
 	} else {
-		if session := app.verify(peer, msg); session != nil {
+		if ok, session := app.verify(peer, msg); ok {
 			peer.Verified(session)
 		} else {
 			Sugar.Errorf("Verify error\n")
@@ -60,14 +71,19 @@ func (app *App) onMessage(peer IPeer, msg []byte) {
 	}
 }
 
+func (app *App) handlePeerDisconnect(peer IPeer) {
+	Sugar.Infof("Disconnect from %s\n", peer.Address())
+}
+
+func (app *App) OnConnect(peer IPeer) {
+	app.events <- GateEventConnect{Peer: peer}
+}
+
 func (app *App) OnMessage(peer IPeer, msg []byte) {
 	app.events <- GateEventMessage{
 		Msg:  msg,
 		Peer: peer,
 	}
-}
-
-func (app *App) onDisconnect(peer IPeer) {
 }
 
 func (app *App) OnDisconnect(peer IPeer) {
@@ -92,11 +108,11 @@ func (app *App) Run() {
 		for event := range app.events {
 			switch event := event.(type) {
 			case GateEventConnect:
-				app.onConnect(event.Peer)
+				app.handlePeerConnect(event.Peer)
 			case GateEventMessage:
-				app.onMessage(event.Peer, event.Msg)
+				app.handlePeerMessage(event.Peer, event.Msg)
 			case GateEventDisconnect:
-				app.onDisconnect(event.Peer)
+				app.handlePeerDisconnect(event.Peer)
 			}
 		}
 	}()

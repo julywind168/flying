@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/gammazero/deque"
@@ -51,6 +52,15 @@ type Session struct {
 }
 
 var _ flying.ISession = (*Session)(nil)
+
+func NewSession(uid string, agent string, peer IPeer) *Session {
+	s := &Session{
+		BaseNode: *flying.NewBaseNode(fmt.Sprintf("Session.%s", uid)),
+		agent:    agent,
+		peer:     peer,
+	}
+	return s
+}
 
 func (s *Session) send(packet Packet) {
 	if bytes, _ := json.Marshal(packet); bytes != nil {
