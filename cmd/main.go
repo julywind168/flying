@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/julywind168/flying"
+	"github.com/julywind168/flying/internal/gate"
 	"github.com/julywind168/flying/server"
 )
 
@@ -19,9 +20,6 @@ func (a *Agent) Started(ctx flying.ServiceCtx) {
 func (a *Agent) Stopped(ctx flying.ServiceCtx) {}
 func (a *Agent) Tick(ctx flying.ServiceCtx, dt time.Duration) {
 	fmt.Printf("Agent %s tick, dt: %+v\n", a.ID, dt)
-	if a.ID == "2" {
-		ctx.Send("Agent.1", "Ping", PingPayload{Msg: "hello world"})
-	}
 }
 
 type PingPayload struct {
@@ -37,13 +35,9 @@ func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.Session, payloa
 }
 
 func main() {
-	world := flying.NewWorld()
-	world.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
-	world.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
-	world.Start()
-	world.FireClientRequest("Agent.1", &server.Session{
-		BaseNode: *flying.NewBaseNode("Session.1"),
-	}, "Heartbeat", []byte{})
-	time.Sleep(time.Second * 3)
-	world.Stop()
+	app := server.NewApp()
+	app.World.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
+	app.World.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
+	app.AddGate(gate.NewWsGate("/", ":7777"))
+	app.Run()
 }
