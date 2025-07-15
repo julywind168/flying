@@ -6,7 +6,10 @@ import (
 
 	"github.com/julywind168/flying"
 	"github.com/julywind168/flying/internal/gate"
+	"github.com/julywind168/flying/internal/model"
 	"github.com/julywind168/flying/server"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type Agent struct {
@@ -35,6 +38,21 @@ func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.Session, payloa
 }
 
 func main() {
+	dsn := "host=localhost user=postgres dbname=game port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	err = db.AutoMigrate(&model.User{})
+	if err != nil {
+		panic("failed to migrate table")
+	}
+
+	user := &model.User{Name: "Jack", Age: 18}
+	result := db.Create(&user)
+	fmt.Printf("insert result: %+v\n", result)
+
 	app := server.NewApp()
 	app.World.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
 	app.World.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
