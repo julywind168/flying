@@ -31,14 +31,22 @@ type IPeer interface {
 	Address() string
 	IsConnected() bool
 	Write(msg []byte)
-	Verified(session *Session)
-	IsVerified() *Session
+	Verified(session ISession)
+	IsVerified() ISession
 	Close()
 }
 
 type PktCacheItem struct {
 	index  uint32
 	packge []byte
+}
+
+type ISession interface {
+	flying.Node
+	send(packet Packet)
+	Agent() string
+	Response(result any)
+	Push(name string, payload any)
 }
 
 type Session struct {
@@ -51,6 +59,7 @@ type Session struct {
 	pktCache deque.Deque[PktCacheItem]
 }
 
+var _ ISession = (*Session)(nil)
 var _ flying.ISession = (*Session)(nil)
 
 func NewSession(uid string, agent string, peer IPeer) *Session {
@@ -60,6 +69,10 @@ func NewSession(uid string, agent string, peer IPeer) *Session {
 		peer:     peer,
 	}
 	return s
+}
+
+func (s *Session) Agent() string {
+	return s.agent
 }
 
 func (s *Session) send(packet Packet) {

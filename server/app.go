@@ -1,12 +1,9 @@
 package server
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/julywind168/flying"
 )
@@ -15,6 +12,7 @@ type App struct {
 	World  *flying.World
 	Gates  []IGate
 	events chan any
+	verify func(app *App, peer IPeer, msg []byte) (bool, ISession)
 }
 
 type GateEventConnect struct {
@@ -30,28 +28,14 @@ type GateEventMessage struct {
 	Msg  []byte
 }
 
-func NewApp() *App {
+func NewApp(verify func(app *App, peer IPeer, msg []byte) (bool, ISession)) *App {
 	app := &App{
 		World:  flying.NewWorld(),
+		Gates:  make([]IGate, 0),
 		events: make(chan any, 1000),
+		verify: verify,
 	}
 	return app
-}
-
-type Authorization struct {
-	Token string
-}
-
-func (app *App) verify(peer IPeer, msg []byte) (bool, *Session) {
-	var auth Authorization
-	if err := json.Unmarshal(msg, &auth); err == nil {
-		uid := "1" // TODO: fix it
-		agent := fmt.Sprintf("SessionAgent.%s", uid)
-		app.World.Spawn(agent, 10*time.Second, &SessionAgent{})
-		return true, NewSession(uid, agent, peer)
-	} else {
-		return false, nil
-	}
 }
 
 func (app *App) handlePeerConnect(peer IPeer) {
@@ -60,9 +44,9 @@ func (app *App) handlePeerConnect(peer IPeer) {
 
 func (app *App) handlePeerMessage(peer IPeer, msg []byte) {
 	if session := peer.IsVerified(); session != nil {
-		app.World.FireClientRequest(session.agent, session, "Request", msg)
+		app.World.FireClientRequest(session.Agent(), session, "Request", msg)
 	} else {
-		if ok, session := app.verify(peer, msg); ok {
+		if ok, session := app.verify(app, peer, msg); ok {
 			peer.Verified(session)
 		} else {
 			Sugar.Errorf("Verify error\n")
