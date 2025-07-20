@@ -48,7 +48,7 @@ type WsGate struct {
 	uri     string
 	addr    string
 	e       *echo.Echo
-	Handler server.IGateHandler
+	Handler server.GateHandler
 }
 
 func NewWsGate(uri string, addr string) *WsGate {
@@ -58,7 +58,7 @@ func NewWsGate(uri string, addr string) *WsGate {
 	}
 }
 
-func (g *WsGate) Start(handler server.IGateHandler) {
+func (g *WsGate) Start(handler server.GateHandler) {
 	g.Handler = handler
 	go func() {
 		e := echo.New()

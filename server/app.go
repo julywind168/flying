@@ -10,7 +10,7 @@ import (
 
 type App struct {
 	World  *flying.World
-	Gates  []IGate
+	Gates  []Gate
 	events chan any
 	verify func(app *App, peer IPeer, msg []byte) (bool, ISession)
 }
@@ -31,7 +31,7 @@ type GateEventMessage struct {
 func NewApp(verify func(app *App, peer IPeer, msg []byte) (bool, ISession)) *App {
 	app := &App{
 		World:  flying.NewWorld(),
-		Gates:  make([]IGate, 0),
+		Gates:  make([]Gate, 0),
 		events: make(chan any, 1000),
 		verify: verify,
 	}
@@ -76,7 +76,7 @@ func (app *App) OnDisconnect(peer IPeer) {
 	}
 }
 
-func (app *App) AddGate(gate IGate) *App {
+func (app *App) AddGate(gate Gate) *App {
 	app.Gates = append(app.Gates, gate)
 	return app
 }
