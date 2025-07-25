@@ -1,4 +1,4 @@
-package demo
+package game
 
 import (
 	"encoding/json"
