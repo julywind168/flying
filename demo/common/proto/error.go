@@ -19,6 +19,8 @@ const (
 	ErrCodeServiceUnavailable
 
 	// 业务错误（3xxx+）
+	ErrCodeUserNotFound ErrCode = 3000 + iota
+	ErrCodeUserExisted
 )
 
 // 错误码映射描述
@@ -33,6 +35,8 @@ var errorMessages = map[ErrCode]string{
 	ErrCodeInternal:           "internal server error",
 	ErrCodeNotImplemented:     "not implemented",
 	ErrCodeServiceUnavailable: "service unavailable",
+	ErrCodeUserNotFound:       "user not found",
+	ErrCodeUserExisted:        "user already exists",
 }
 
 func (e ErrCode) Message() string {

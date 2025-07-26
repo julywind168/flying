@@ -1,11 +1,11 @@
 package demo
 
 import (
-	"github.com/julywind168/flying/demo/game"
-	"github.com/julywind168/flying/demo/login"
+	"github.com/julywind168/flying/demo/servers/backend"
+	"github.com/julywind168/flying/demo/servers/game"
 )
 
 func Start() {
-	go login.Start()
+	go backend.Start()
 	game.Start()
 }
