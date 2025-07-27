@@ -8,7 +8,6 @@ type Node interface {
 	Children() []Node
 	SetLocked(bool)
 	IsReady() bool
-	IsLeaf() bool
 }
 
 type EventType uint8
@@ -89,8 +88,4 @@ func (n *BaseNode) IsReady() bool {
 		}
 	}
 	return true
-}
-
-func (n *BaseNode) IsLeaf() bool {
-	return len(n.children) == 0
 }

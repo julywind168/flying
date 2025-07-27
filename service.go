@@ -92,14 +92,10 @@ func (s *Service[T]) getCtx() ServiceCtx {
 			}
 		},
 		sendFunc: func(to string, name string, params any) {
-			s.send(to, name, params)
+			s.World.FireServiceMessage(s.ID(), to, name, params)
 		},
 		fireClientRequestFunc: s.World.FireClientRequest,
 	}
-}
-
-func (s *Service[T]) send(to string, name string, params any) {
-	s.World.FireServiceMessage(s.ID(), to, name, params)
 }
 
 func (s *Service[T]) Started() {
