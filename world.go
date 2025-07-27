@@ -81,10 +81,10 @@ func (w *World) doEvent(s *Service[UService], e Event) {
 		case EventTypeTick:
 			s.Tick()
 		case EventTypeMessage:
-			s.Message(e.From, e.Playload.(Message))
+			s.HandleMessage(e.From, e.Playload.(Message))
 		case EventTypeClientReq:
 			session := e.Children()[0].(ISession)
-			s.Handler(session, e.Playload.(Request))
+			s.HandleRequest(session, e.Playload.(Request))
 		}
 		w.commands <- commandEventDone{
 			service:    s,

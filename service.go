@@ -17,8 +17,8 @@ type IService interface {
 	Node
 	Started()
 	Tick()
-	Message(from string, msg Message)
-	Handler(session ISession, req Request)
+	HandleMessage(from string, msg Message)
+	HandleRequest(session ISession, req Request)
 	Stopped()
 }
 
@@ -106,7 +106,7 @@ func (s *Service[T]) Tick() {
 	s.State.Tick(s.getCtx(), s.Timer.Interval)
 }
 
-func (s *Service[T]) Message(from string, msg Message) {
+func (s *Service[T]) HandleMessage(from string, msg Message) {
 	v := reflect.ValueOf(s.State)
 	method := v.MethodByName(msg.Name)
 	if !method.IsValid() {
@@ -133,7 +133,7 @@ func (s *Service[T]) Message(from string, msg Message) {
 	method.Call(args)
 }
 
-func (s *Service[T]) Handler(session ISession, req Request) {
+func (s *Service[T]) HandleRequest(session ISession, req Request) {
 	v := reflect.ValueOf(s.State)
 	method := v.MethodByName(req.Name)
 	if !method.IsValid() {
