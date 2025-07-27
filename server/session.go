@@ -26,13 +26,13 @@ type Packet struct {
 	Payload []byte
 }
 
-type IPeer interface {
+type Peer interface {
 	ID() string
 	Address() string
 	IsConnected() bool
 	Write(msg []byte)
-	Verified(session ISession)
-	IsVerified() ISession
+	Verified(session Session)
+	IsVerified() Session
 	Close()
 }
 
@@ -41,7 +41,7 @@ type PktCacheItem struct {
 	packge []byte
 }
 
-type ISession interface {
+type Session interface {
 	flying.Node
 	send(packet Packet)
 	Agent() string
@@ -49,21 +49,21 @@ type ISession interface {
 	Push(name string, payload any)
 }
 
-type Session struct {
+type BaseSession struct {
 	flying.BaseNode
 	agent    string // session agent service name
-	peer     IPeer
+	peer     Peer
 	packet   Packet // current request packet
 	request  bool
 	index    uint32 // server send packet index (start from 1)
 	pktCache deque.Deque[PktCacheItem]
 }
 
-var _ ISession = (*Session)(nil)
-var _ flying.ISession = (*Session)(nil)
+var _ Session = (*BaseSession)(nil)
+var _ flying.ISession = (*BaseSession)(nil)
 
-func NewSession(uid string, agent string, peer IPeer) *Session {
-	s := &Session{
+func NewBaseSession(uid string, agent string, peer Peer) *BaseSession {
+	s := &BaseSession{
 		BaseNode: *flying.NewBaseNode(fmt.Sprintf("Session.%s", uid)),
 		agent:    agent,
 		peer:     peer,
@@ -71,11 +71,11 @@ func NewSession(uid string, agent string, peer IPeer) *Session {
 	return s
 }
 
-func (s *Session) Agent() string {
+func (s *BaseSession) Agent() string {
 	return s.agent
 }
 
-func (s *Session) send(packet Packet) {
+func (s *BaseSession) send(packet Packet) {
 	if bytes, _ := json.Marshal(packet); bytes != nil {
 		s.index++
 		s.pktCache.PushBack(PktCacheItem{
@@ -91,7 +91,7 @@ func (s *Session) send(packet Packet) {
 	}
 }
 
-func (s *Session) Response(result any) {
+func (s *BaseSession) Response(result any) {
 	if s.request {
 		payload, _ := json.Marshal(result)
 		s.send(Packet{
@@ -108,7 +108,7 @@ func (s *Session) Response(result any) {
 	}
 }
 
-func (s *Session) Push(name string, payload any) {
+func (s *BaseSession) Push(name string, payload any) {
 	data, _ := json.Marshal(payload)
 	s.send(Packet{
 		Type:    PacketTypeRequest,
@@ -125,7 +125,7 @@ var _ flying.UService = (*SessionAgent)(nil)
 func (s *SessionAgent) Started(ctx flying.ServiceCtx)                {}
 func (s *SessionAgent) Stopped(ctx flying.ServiceCtx)                {}
 func (s *SessionAgent) Tick(ctx flying.ServiceCtx, dt time.Duration) {}
-func (a *SessionAgent) Request(ctx flying.ServiceCtx, session *Session, packet Packet) {
+func (a *SessionAgent) Request(ctx flying.ServiceCtx, session *BaseSession, packet Packet) {
 	if packet.Type == PacketTypeRequest {
 		if session.request {
 			Sugar.Errorf("You maybe forgot to response the request %+v\n", session.packet)

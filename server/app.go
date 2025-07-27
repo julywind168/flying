@@ -12,23 +12,23 @@ type App struct {
 	World  *flying.World
 	Gates  []Gate
 	events chan any
-	verify func(app *App, peer IPeer, msg []byte) (bool, ISession)
+	verify func(app *App, peer Peer, msg []byte) (bool, Session)
 }
 
 type GateEventConnect struct {
-	Peer IPeer
+	Peer Peer
 }
 
 type GateEventDisconnect struct {
-	Peer IPeer
+	Peer Peer
 }
 
 type GateEventMessage struct {
-	Peer IPeer
+	Peer Peer
 	Msg  []byte
 }
 
-func NewApp(verify func(app *App, peer IPeer, msg []byte) (bool, ISession)) *App {
+func NewApp(verify func(app *App, peer Peer, msg []byte) (bool, Session)) *App {
 	app := &App{
 		World:  flying.NewWorld(),
 		Gates:  make([]Gate, 0),
@@ -38,11 +38,11 @@ func NewApp(verify func(app *App, peer IPeer, msg []byte) (bool, ISession)) *App
 	return app
 }
 
-func (app *App) handlePeerConnect(peer IPeer) {
+func (app *App) handlePeerConnect(peer Peer) {
 	Sugar.Infof("Connected from %s\n", peer.Address())
 }
 
-func (app *App) handlePeerMessage(peer IPeer, msg []byte) {
+func (app *App) handlePeerMessage(peer Peer, msg []byte) {
 	if session := peer.IsVerified(); session != nil {
 		app.World.FireClientRequest(session.Agent(), session, "Request", msg)
 	} else {
@@ -55,22 +55,22 @@ func (app *App) handlePeerMessage(peer IPeer, msg []byte) {
 	}
 }
 
-func (app *App) handlePeerDisconnect(peer IPeer) {
+func (app *App) handlePeerDisconnect(peer Peer) {
 	Sugar.Infof("Disconnect from %s\n", peer.Address())
 }
 
-func (app *App) OnConnect(peer IPeer) {
+func (app *App) OnConnect(peer Peer) {
 	app.events <- GateEventConnect{Peer: peer}
 }
 
-func (app *App) OnMessage(peer IPeer, msg []byte) {
+func (app *App) OnMessage(peer Peer, msg []byte) {
 	app.events <- GateEventMessage{
 		Msg:  msg,
 		Peer: peer,
 	}
 }
 
-func (app *App) OnDisconnect(peer IPeer) {
+func (app *App) OnDisconnect(peer Peer) {
 	app.events <- GateEventDisconnect{
 		Peer: peer,
 	}

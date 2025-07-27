@@ -8,13 +8,13 @@ import (
 )
 
 type Session struct {
-	server.Session
+	server.BaseSession
 	User *model.User
 }
 
-func NewSession(agent string, peer server.IPeer, user *model.User) *Session {
+func NewSession(agent string, peer server.Peer, user *model.User) *Session {
 	return &Session{
-		Session: *server.NewSession(strconv.FormatUint(uint64(user.ID), 10), agent, peer),
-		User:    user,
+		BaseSession: *server.NewBaseSession(strconv.FormatUint(uint64(user.ID), 10), agent, peer),
+		User:        user,
 	}
 }

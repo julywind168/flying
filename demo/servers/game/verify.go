@@ -44,7 +44,7 @@ func AuthenticateToken(tokenString string) (*jwt.MapClaims, error) {
 	return nil, errors.New("invalid token")
 }
 
-func Verify(app *server.App, peer server.IPeer, msg []byte) (bool, server.ISession) {
+func Verify(app *server.App, peer server.Peer, msg []byte) (bool, server.Session) {
 	var auth Authorization
 	if err := json.Unmarshal(msg, &auth); err != nil {
 		server.Sugar.Warnw("Failed to unmarshal authorization message", "error", err, "msg", string(msg))
@@ -85,5 +85,5 @@ func Verify(app *server.App, peer server.IPeer, msg []byte) (bool, server.ISessi
 
 	agent := fmt.Sprintf("SessionAgent.%d", userID)
 	app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
-	return true, server.NewSession(strconv.Itoa(int(userID)), agent, peer) // todo: use NewSession
+	return true, server.NewBaseSession(strconv.Itoa(int(userID)), agent, peer) // todo: use NewSession
 }

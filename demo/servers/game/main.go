@@ -30,7 +30,7 @@ func (a *Agent) Ping(ctx flying.ServiceCtx, from string, payload PingPayload) {
 	fmt.Printf("Agent %s ping from %s, payload: %+v\n", a.ID, from, payload)
 }
 
-func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.Session, payload any) {
+func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.BaseSession, payload any) {
 	fmt.Printf("Agent %s heartbeat from %s, payload: %+v\n", a.ID, session.BaseNode.ID(), payload)
 }
 

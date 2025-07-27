@@ -1,9 +1,9 @@
 package server
 
 type GateHandler interface {
-	OnConnect(peer IPeer)
-	OnMessage(peer IPeer, msg []byte)
-	OnDisconnect(peer IPeer)
+	OnConnect(peer Peer)
+	OnMessage(peer Peer, msg []byte)
+	OnDisconnect(peer Peer)
 }
 
 type Gate interface {

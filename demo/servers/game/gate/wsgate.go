@@ -8,7 +8,7 @@ import (
 
 type WsPeer struct {
 	conn      *websocket.Conn
-	session   server.ISession
+	session   server.Session
 	connected bool
 }
 
@@ -30,11 +30,11 @@ func (p *WsPeer) Write(msg []byte) {
 	}
 }
 
-func (p *WsPeer) Verified(session server.ISession) {
+func (p *WsPeer) Verified(session server.Session) {
 	p.session = session
 }
 
-func (p *WsPeer) IsVerified() server.ISession {
+func (p *WsPeer) IsVerified() server.Session {
 	return p.session
 }
 
