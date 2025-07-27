@@ -2,24 +2,88 @@ package game
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/julywind168/flying/demo/config"
 	"github.com/julywind168/flying/server"
 )
 
 type Authorization struct {
-	Token string
+	Token string `json:"token"`
+}
+
+func AuthenticateToken(tokenString string) (*jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(config.JWTSecretKey), nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("token parsing failed: %v", err)
+	}
+
+	// 验证 token 是否有效
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// 检查 token 是否过期
+		if exp, ok := claims["exp"].(float64); ok {
+			if time.Now().Unix() > int64(exp) {
+				return nil, errors.New("token has expired")
+			}
+		} else {
+			return nil, errors.New("invalid expiration claim")
+		}
+		return &claims, nil
+	}
+
+	return nil, errors.New("invalid token")
 }
 
 func Verify(app *server.App, peer server.IPeer, msg []byte) (bool, server.ISession) {
 	var auth Authorization
-	if err := json.Unmarshal(msg, &auth); err == nil {
-		uid := "1" // TODO: fix it
-		agent := fmt.Sprintf("SessionAgent.%s", uid)
-		app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
-		return true, server.NewSession(uid, agent, peer)
-	} else {
+	if err := json.Unmarshal(msg, &auth); err != nil {
+		server.Sugar.Warnw("Failed to unmarshal authorization message", "error", err, "msg", string(msg))
 		return false, nil
 	}
+
+	claims, err := AuthenticateToken(auth.Token)
+	if err != nil {
+		server.Sugar.Warnw("Authentication failed", "error", err)
+		return false, nil
+	}
+
+	userIDAny, ok := (*claims)["user_id"]
+	if !ok {
+		server.Sugar.Warn("Invalid user ID in token claims")
+		return false, nil
+	}
+
+	var userID uint
+	switch v := userIDAny.(type) {
+	case float64:
+		userID = uint(v)
+	case int:
+		userID = uint(v)
+	case uint:
+		userID = v
+	case string:
+		parsed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			server.Sugar.Warn("Failed to parse user ID string in token claims")
+			return false, nil
+		}
+		userID = uint(parsed)
+	default:
+		server.Sugar.Warn("Unknown user ID type in token claims")
+		return false, nil
+	}
+
+	agent := fmt.Sprintf("SessionAgent.%d", userID)
+	app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
+	return true, server.NewSession(strconv.Itoa(int(userID)), agent, peer) // todo: use NewSession
 }

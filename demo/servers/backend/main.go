@@ -19,7 +19,7 @@ import (
 
 // login or register result
 type Result struct {
-	Code    proto.ErrCode `json:"code"`              // 错误码，0 表示成功，其他表示错误
+	Code    proto.ErrCode `json:"code"`              // 错误码，1 表示成功，其他表示错误
 	Message string        `json:"message,omitempty"` // 错误信息
 	Token   string        `json:"token,omitempty"`   // 登录成功时返回
 }
@@ -117,9 +117,8 @@ func loginHandler(db *gorm.DB) echo.HandlerFunc {
 
 func genToken(user *model.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(),
+		"user_id": user.ID,
+		"exp":     time.Now().Add(time.Hour * 24).Unix(),
 	})
 	return token.SignedString([]byte(config.JWTSecretKey))
 }
