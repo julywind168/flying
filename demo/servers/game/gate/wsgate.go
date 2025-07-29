@@ -1,9 +1,13 @@
 package gate
 
 import (
+	"github.com/gorilla/websocket"
 	"github.com/julywind168/flying/server"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/net/websocket"
+)
+
+var (
+	upgrader = websocket.Upgrader{}
 )
 
 type WsPeer struct {
@@ -26,7 +30,7 @@ func (p *WsPeer) IsConnected() bool {
 
 func (p *WsPeer) Write(msg []byte) {
 	if p.IsConnected() {
-		p.conn.Write(msg)
+		p.conn.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
@@ -63,24 +67,26 @@ func (g *WsGate) Start(handler server.GateHandler) {
 	go func() {
 		e := echo.New()
 		e.GET(g.uri, func(c echo.Context) error {
-			websocket.Handler(func(ws *websocket.Conn) {
-				defer ws.Close()
-				peer := &WsPeer{
-					conn:      ws,
-					connected: true,
+			ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+			if err != nil {
+				return err
+			}
+			defer ws.Close()
+
+			peer := &WsPeer{
+				conn:      ws,
+				connected: true,
+			}
+			handler.OnConnect(peer)
+			for {
+				_, msg, err := ws.ReadMessage()
+				if err != nil {
+					peer.connected = false
+					handler.OnDisconnect(peer)
+					break
 				}
-				handler.OnConnect(peer)
-				for {
-					var msg []byte
-					err := websocket.Message.Receive(ws, &msg)
-					if err != nil {
-						peer.connected = false
-						handler.OnDisconnect(peer)
-						break
-					}
-					handler.OnMessage(peer, msg)
-				}
-			}).ServeHTTP(c.Response(), c.Request())
+				handler.OnMessage(peer, msg)
+			}
 			return nil
 		})
 		e.Logger.Fatal(e.Start(g.addr))

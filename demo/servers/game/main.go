@@ -19,7 +19,7 @@ func (a *Agent) Started(ctx flying.ServiceCtx) {
 }
 func (a *Agent) Stopped(ctx flying.ServiceCtx) {}
 func (a *Agent) Tick(ctx flying.ServiceCtx, dt time.Duration) {
-	fmt.Printf("Agent %s tick, dt: %+v\n", a.ID, dt)
+	// fmt.Printf("Agent %s tick, dt: %+v\n", a.ID, dt)
 }
 
 type PingPayload struct {
@@ -38,6 +38,6 @@ func Start() {
 	app := server.NewApp(Verify)
 	app.World.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
 	app.World.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
-	app.AddGate(gate.NewWsGate("/", ":7777"))
+	app.AddGate(gate.NewWsGate("/", ":8888"))
 	app.Run()
 }
