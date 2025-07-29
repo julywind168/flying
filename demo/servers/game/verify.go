@@ -46,23 +46,32 @@ func AuthenticateToken(tokenString string) (*jwt.MapClaims, error) {
 	return nil, errors.New("invalid token")
 }
 
-func Verify(app *server.App, peer server.Peer, msg []byte) (bool, server.Session) {
+/*
+Handshake Response
+
+	200 OK
+	400 Bad Request
+	401 Unauthorized
+	403 Index Expired
+	404 User Not Found
+*/
+func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, error) {
 	var auth Authorization
 	if err := json.Unmarshal(msg, &auth); err != nil {
 		server.Sugar.Warnw("Failed to unmarshal authorization message", "error", err, "msg", string(msg))
-		return false, nil
+		return nil, fmt.Errorf("400 Bad Request")
 	}
 
 	claims, err := AuthenticateToken(auth.Token)
 	if err != nil {
 		server.Sugar.Warnw("Authentication failed", "error", err)
-		return false, nil
+		return nil, fmt.Errorf("401 Unauthorized")
 	}
 
 	userIDAny, ok := (*claims)["user_id"]
 	if !ok {
 		server.Sugar.Warn("Invalid user ID in token claims")
-		return false, nil
+		return nil, fmt.Errorf("401 Unauthorized")
 	}
 
 	var userID uint
@@ -77,23 +86,23 @@ func Verify(app *server.App, peer server.Peer, msg []byte) (bool, server.Session
 		parsed, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
 			server.Sugar.Warn("Failed to parse user ID string in token claims")
-			return false, nil
+			return nil, fmt.Errorf("401 Unauthorized")
 		}
 		userID = uint(parsed)
 	default:
 		server.Sugar.Warn("Unknown user ID type in token claims")
-		return false, nil
+		return nil, fmt.Errorf("401 Unauthorized")
 	}
 
 	// load user from database
 	var user model.User
 	if err := db.DB.Where("id = ?", userID).First(&user).Error; err != nil {
 		server.Sugar.Warnf("User not found: %v", err)
-		return false, nil
+		return nil, fmt.Errorf("404 User Not Found")
 	}
 
 	agent := fmt.Sprintf("SessionAgent.%d", userID)
 	app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
 
-	return true, NewSession(agent, peer, &user)
+	return NewSession(agent, peer, &user), nil
 }
