@@ -1,7 +1,11 @@
 package main
 
-import "github.com/julywind168/flying/demo"
+import (
+	"github.com/julywind168/flying/demo/servers/backend"
+	"github.com/julywind168/flying/demo/servers/game"
+)
 
 func main() {
-	demo.Start()
+	go backend.Start()
+	game.Start()
 }
