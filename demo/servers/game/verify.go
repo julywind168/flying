@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/julywind168/flying/demo/common/db"
+	"github.com/julywind168/flying/demo/common/model"
 	"github.com/julywind168/flying/demo/config"
 	"github.com/julywind168/flying/server"
 )
@@ -83,7 +85,15 @@ func Verify(app *server.App, peer server.Peer, msg []byte) (bool, server.Session
 		return false, nil
 	}
 
+	// load user from database
+	var user model.User
+	if err := db.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		server.Sugar.Warnf("User not found: %v", err)
+		return false, nil
+	}
+
 	agent := fmt.Sprintf("SessionAgent.%d", userID)
 	app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
-	return true, server.NewBaseSession(strconv.Itoa(int(userID)), agent, peer) // todo: use NewSession
+
+	return true, NewSession(agent, peer, &user)
 }

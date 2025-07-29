@@ -6,7 +6,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewDB() *gorm.DB {
+var DB *gorm.DB
+
+func init() {
 	dsn := "host=localhost user=postgres dbname=game port=5432 sslmode=disable TimeZone=Asia/Shanghai"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -16,5 +18,5 @@ func NewDB() *gorm.DB {
 	if err != nil {
 		panic("failed to migrate table: " + err.Error())
 	}
-	return db
+	DB = db
 }
