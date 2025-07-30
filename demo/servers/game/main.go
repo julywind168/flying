@@ -5,13 +5,13 @@ import (
 	"time"
 
 	"github.com/julywind168/flying"
+	"github.com/julywind168/flying/demo/common/proto"
 	"github.com/julywind168/flying/demo/servers/game/gate"
 	"github.com/julywind168/flying/server"
 )
 
 type Agent struct {
-	ID       string
-	NickName string
+	ID string
 }
 
 func (a *Agent) Started(ctx flying.ServiceCtx) {
@@ -30,14 +30,16 @@ func (a *Agent) Ping(ctx flying.ServiceCtx, from string, payload PingPayload) {
 	fmt.Printf("Agent %s ping from %s, payload: %+v\n", a.ID, from, payload)
 }
 
-func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *server.BaseSession, payload any) {
+func (a *Agent) Heartbeat(ctx flying.ServiceCtx, session *Session, payload proto.HeartbeatRequest) {
 	fmt.Printf("Agent %s heartbeat from %s, payload: %+v\n", a.ID, session.BaseNode.ID(), payload)
+	session.Response(proto.HeartbeatResponse{
+		Code:      proto.ErrCodeSuccess,
+		Timestamp: time.Now().Unix(),
+	})
 }
 
 func Start() {
 	app := server.NewApp(Verify)
-	app.World.Spawn("Agent.1", time.Second, &Agent{ID: "1", NickName: "Jack"})
-	app.World.Spawn("Agent.2", time.Second, &Agent{ID: "2", NickName: "Lily"})
 	app.AddGate(gate.NewWsGate("/", ":8888"))
 	app.Run()
 }

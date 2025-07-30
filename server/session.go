@@ -43,19 +43,19 @@ type PktCacheItem struct {
 
 type Session interface {
 	flying.Node
-	send(packet Packet)
 	Agent() string
 	Response(result any)
 	Push(name string, payload any)
+	GetPacket() *Packet
+	SetPacket(packet *Packet)
 }
 
 type BaseSession struct {
 	flying.BaseNode
 	agent    string // session agent service name
 	peer     Peer
-	packet   Packet // current request packet
-	request  bool
-	index    uint32 // server send packet index (start from 1)
+	packet   *Packet // current request packet
+	index    uint32  // server send packet index (start from 1)
 	pktCache deque.Deque[PktCacheItem]
 }
 
@@ -92,7 +92,7 @@ func (s *BaseSession) send(packet Packet) {
 }
 
 func (s *BaseSession) Response(result any) {
-	if s.request {
+	if s.packet != nil {
 		payload, _ := json.Marshal(result)
 		s.send(Packet{
 			Service: "",
@@ -101,8 +101,7 @@ func (s *BaseSession) Response(result any) {
 			Name:    s.packet.Name,
 			Payload: payload,
 		})
-		s.request = false
-		s.packet = Packet{}
+		s.packet = nil
 	} else {
 		Sugar.Errorln("Session.Response: you maybe already response")
 	}
@@ -118,6 +117,14 @@ func (s *BaseSession) Push(name string, payload any) {
 	})
 }
 
+func (s *BaseSession) SetPacket(packet *Packet) {
+	s.packet = packet
+}
+
+func (s *BaseSession) GetPacket() *Packet {
+	return s.packet
+}
+
 type SessionAgent struct{}
 
 var _ flying.UService = (*SessionAgent)(nil)
@@ -125,13 +132,12 @@ var _ flying.UService = (*SessionAgent)(nil)
 func (s *SessionAgent) Started(ctx flying.ServiceCtx)                {}
 func (s *SessionAgent) Stopped(ctx flying.ServiceCtx)                {}
 func (s *SessionAgent) Tick(ctx flying.ServiceCtx, dt time.Duration) {}
-func (a *SessionAgent) Request(ctx flying.ServiceCtx, session *BaseSession, packet Packet) {
+func (a *SessionAgent) Request(ctx flying.ServiceCtx, session Session, packet Packet) {
 	if packet.Type == PacketTypeRequest {
-		if session.request {
-			Sugar.Errorf("You maybe forgot to response the request %+v\n", session.packet)
+		if p := session.GetPacket(); p != nil {
+			Sugar.Errorf("You maybe forgot to response the request %+v\n", p)
 		}
-		session.packet = packet
-		session.request = true
+		session.SetPacket(&packet)
 		ctx.FireClientRequest(packet.Service, session, packet.Name, packet.Payload)
 	} else {
 		Sugar.Errorln("This example doesn't support request client")

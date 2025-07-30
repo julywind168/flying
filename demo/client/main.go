@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -14,14 +13,25 @@ import (
 	"github.com/julywind168/flying/demo/common/proto"
 )
 
-type Result struct {
-	Code    proto.ErrCode `json:"code"`              // 错误码，1 表示成功，其他表示错误
-	Message string        `json:"message,omitempty"` // 错误信息
-	Token   string        `json:"token,omitempty"`   // 登录成功时返回
-}
+type Result proto.LoginResult
 
 type Authorization struct {
 	Token string `json:"token"`
+}
+
+type PacketType uint8
+
+const (
+	PacketTypeRequest PacketType = iota
+	PacketTypeResponse
+)
+
+type Packet struct {
+	Service string // route
+	Type    PacketType
+	Session uint32 // request ID
+	Name    string // method name
+	Payload []byte
 }
 
 const (
@@ -29,13 +39,60 @@ const (
 	PASSWORD = "123456"
 )
 
+type Client struct {
+	Session uint32
+	Conn    *websocket.Conn
+}
+
+func (c *Client) Cleanup() {
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
+}
+
+func (c *Client) SendRequest(service, name string, payload any) {
+	c.Session += 1
+	data, _ := json.Marshal(payload)
+	p := Packet{
+		Service: service,
+		Type:    PacketTypeRequest,
+		Session: c.Session,
+		Name:    name,
+		Payload: data,
+	}
+	if err := c.Conn.WriteJSON(p); err != nil {
+		fmt.Printf("Sent request error: %+v\n", err)
+		return
+	} else {
+		fmt.Printf("Sent request %s\n", p.Name)
+	}
+}
+
+// 读取 ws 消息并打印
+func (c *Client) ReadLoop() {
+	for {
+		var p Packet
+		err := c.Conn.ReadJSON(&p)
+		if err != nil {
+			return
+		}
+		fmt.Printf("Received: %+v\n", p)
+	}
+}
+
 func Start() {
 	doRegister()
 	r := doLogin()
 	if r.Code != proto.ErrCodeSuccess {
 		panic("Login failed")
 	}
-	connectGameServer(r.Token)
+	client := connectGameServer(r.Token)
+	defer client.Cleanup()
+	go client.ReadLoop()
+	client.SendRequest("Agent."+r.UserID, "Heartbeat", proto.HeartbeatRequest{Timestamp: time.Now().Unix()})
+
+	time.Sleep(time.Second * 3)
+	println("Bye")
 }
 
 // step 1: register
@@ -44,7 +101,7 @@ func doRegister() {
 		Username: USERNAME,
 		Password: PASSWORD,
 	})
-	fmt.Printf("register result: %+v\n", r)
+	fmt.Printf("Register result: %+v\n", r)
 }
 
 // step 2: login
@@ -53,22 +110,22 @@ func doLogin() Result {
 		Username: USERNAME,
 		Password: PASSWORD,
 	})
-	fmt.Printf("login result: %+v\n", r)
+	fmt.Printf("Login result: %+v\n", r)
 	return r
 }
 
 // setp 3: connect game server
-func connectGameServer(token string) {
+func connectGameServer(token string) *Client {
 	u := url.URL{Scheme: "ws", Host: "127.0.0.1:8888", Path: ""}
 
-	fmt.Printf("connecting to %s\n", u.String())
+	fmt.Printf("Connecting to %s\n", u.String())
 
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		panic("dial: " + err.Error())
 	}
-	defer conn.Close()
+	// defer conn.Close()
 
 	handshake, _ := json.Marshal(Authorization{
 		Token: token,
@@ -77,18 +134,24 @@ func connectGameServer(token string) {
 	// 发送 handshake
 	err = conn.WriteMessage(websocket.TextMessage, handshake)
 	if err != nil {
-		log.Println("write:", err)
-		return
+		panic("write: " + err.Error())
 	}
 
 	// 接收消息
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	_, message, err := conn.ReadMessage()
 	if err != nil {
-		log.Println("read:", err)
-		return
+		panic("read: " + err.Error())
 	}
-	log.Printf("received: %s", message)
+	if string(message) == "200 OK" {
+		fmt.Println("Handshake: 200 OK")
+		return &Client{
+			Session: 0,
+			Conn:    conn,
+		}
+	} else {
+		panic("Handshake error: " + string(message))
+	}
 }
 
 func jsonPost[T any](url string, data any) T {

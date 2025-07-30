@@ -102,7 +102,11 @@ func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, erro
 	}
 
 	agent := fmt.Sprintf("SessionAgent.%d", userID)
+
+	// session agent
 	app.World.Spawn(agent, 10*time.Second, &server.SessionAgent{})
+	// user agent
+	app.World.Spawn(fmt.Sprintf("Agent.%d", userID), 10*time.Second, &Agent{ID: fmt.Sprintf("%d", userID)})
 
 	return NewSession(agent, peer, &user), nil
 }

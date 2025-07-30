@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"fmt"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/julywind168/flying/demo/common/db"
 	"github.com/julywind168/flying/demo/common/model"
@@ -16,12 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// login or register result
-type Result struct {
-	Code    proto.ErrCode `json:"code"`              // 错误码，1 表示成功，其他表示错误
-	Message string        `json:"message,omitempty"` // 错误信息
-	Token   string        `json:"token,omitempty"`   // 登录成功时返回
-}
+type Result proto.LoginResult
 
 func Start() {
 	e := echo.New()
@@ -75,6 +72,7 @@ func register(c echo.Context) error {
 		Code:    proto.ErrCodeSuccess,
 		Message: "User registered successfully",
 		Token:   token,
+		UserID:  fmt.Sprintf("%d", user.ID),
 	})
 }
 
@@ -100,11 +98,11 @@ func login(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusOK, Result{Code: proto.ErrCodeInternal, Message: "Failed to generate token"})
 	}
-
 	return c.JSON(http.StatusOK, Result{
 		Code:    proto.ErrCodeSuccess,
 		Message: "Login successful",
 		Token:   token,
+		UserID:  fmt.Sprintf("%d", user.ID),
 	})
 }
 
