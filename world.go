@@ -101,6 +101,7 @@ func (w *World) tryDispatchPendingEvents() {
 				w.events.Remove(e)
 				w.doEvent(s, event)
 				w.tryDispatchPendingEvents()
+				return
 			} else {
 				continue
 			}
