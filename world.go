@@ -109,6 +109,7 @@ func (w *World) tryDispatchPendingEvents() {
 			w.events.Remove(e)
 			log.Printf("Service<%s> does not exist, event %+v discarded", event.To, event)
 			w.tryDispatchPendingEvents()
+			return
 		}
 	}
 }
