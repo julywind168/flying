@@ -24,6 +24,7 @@ type Packet struct {
 	Session uint32 // request ID
 	Name    string // method name
 	Payload []byte
+	Index   uint32 // server packet index
 }
 
 type Peer interface {
@@ -76,19 +77,17 @@ func (s *BaseSession) Agent() string {
 }
 
 func (s *BaseSession) send(packet Packet) {
-	if bytes, _ := json.Marshal(packet); bytes != nil {
-		s.index++
-		s.pktCache.PushBack(PktCacheItem{
-			index:  s.index,
-			packge: bytes,
-		})
-		if s.pktCache.Len() > PKT_CACHE_SIZE {
-			s.pktCache.PopFront()
-		}
-		s.peer.Write(bytes)
-	} else {
-		Sugar.Errorf("packet %+v marshal error\n", packet)
+	s.index++
+	packet.Index = s.index
+	bytes, _ := json.Marshal(packet)
+	s.pktCache.PushBack(PktCacheItem{
+		index:  s.index,
+		packge: bytes,
+	})
+	if s.pktCache.Len() > PKT_CACHE_SIZE {
+		s.pktCache.PopFront()
 	}
+	s.peer.Write(bytes)
 }
 
 func (s *BaseSession) Response(result any) {

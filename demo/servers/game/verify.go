@@ -10,16 +10,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/julywind168/flying/demo/common/db"
 	"github.com/julywind168/flying/demo/common/model"
+	"github.com/julywind168/flying/demo/common/proto"
 	"github.com/julywind168/flying/demo/config"
 	"github.com/julywind168/flying/server"
 )
 
-type Authorization struct {
-	Token string `json:"token"`
-}
-
 func AuthenticateToken(tokenString string) (*jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -46,32 +43,31 @@ func AuthenticateToken(tokenString string) (*jwt.MapClaims, error) {
 	return nil, errors.New("invalid token")
 }
 
-/*
-Handshake Response
+const (
+	HandshakeOK           = "200 OK"
+	HandshakeBadRequest   = "400 Bad Request"
+	HandshakeUnauthorized = "401 Unauthorized"
+	HandshakeIndexExpired = "403 Index Expired"
+	HandshakeUserNotFound = "404 User Not Found"
+)
 
-	200 OK
-	400 Bad Request
-	401 Unauthorized
-	403 Index Expired
-	404 User Not Found
-*/
-func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, error) {
-	var auth Authorization
-	if err := json.Unmarshal(msg, &auth); err != nil {
-		server.Sugar.Warnw("Failed to unmarshal authorization message", "error", err, "msg", string(msg))
-		return nil, fmt.Errorf("400 Bad Request")
+func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, []byte) {
+	var handshake proto.Handshake
+	if err := json.Unmarshal(msg, &handshake); err != nil {
+		server.Sugar.Warnw("Failed to unmarshal handshake message", "error", err, "msg", string(msg))
+		return nil, []byte(HandshakeBadRequest)
 	}
 
-	claims, err := AuthenticateToken(auth.Token)
+	claims, err := AuthenticateToken(handshake.Token)
 	if err != nil {
-		server.Sugar.Warnw("Authentication failed", "error", err)
-		return nil, fmt.Errorf("401 Unauthorized")
+		server.Sugar.Warnw("Handshake failed", "error", err)
+		return nil, []byte(HandshakeUnauthorized)
 	}
 
 	userIDAny, ok := (*claims)["user_id"]
 	if !ok {
 		server.Sugar.Warn("Invalid user ID in token claims")
-		return nil, fmt.Errorf("401 Unauthorized")
+		return nil, []byte(HandshakeUnauthorized)
 	}
 
 	var userID uint
@@ -86,19 +82,19 @@ func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, erro
 		parsed, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
 			server.Sugar.Warn("Failed to parse user ID string in token claims")
-			return nil, fmt.Errorf("401 Unauthorized")
+			return nil, []byte(HandshakeUnauthorized)
 		}
 		userID = uint(parsed)
 	default:
 		server.Sugar.Warn("Unknown user ID type in token claims")
-		return nil, fmt.Errorf("401 Unauthorized")
+		return nil, []byte(HandshakeUnauthorized)
 	}
 
 	// load user from database
 	var user model.User
 	if err := db.DB.Where("id = ?", userID).First(&user).Error; err != nil {
 		server.Sugar.Warnf("User not found: %v", err)
-		return nil, fmt.Errorf("404 User Not Found")
+		return nil, []byte(HandshakeUserNotFound)
 	}
 
 	agent := fmt.Sprintf("SessionAgent.%d", userID)
@@ -108,5 +104,5 @@ func Verify(app *server.App, peer server.Peer, msg []byte) (server.Session, erro
 	// user agent
 	app.World.Spawn(fmt.Sprintf("Agent.%d", userID), 10*time.Second, &Agent{ID: fmt.Sprintf("%d", userID)})
 
-	return NewSession(agent, peer, &user), nil
+	return NewSession(agent, peer, &user), []byte(HandshakeOK)
 }

@@ -15,10 +15,6 @@ import (
 
 type Result proto.LoginResult
 
-type Authorization struct {
-	Token string `json:"token"`
-}
-
 type PacketType uint8
 
 const (
@@ -32,6 +28,7 @@ type Packet struct {
 	Session uint32 // request ID
 	Name    string // method name
 	Payload []byte
+	Index   uint32 // server packet index
 }
 
 const (
@@ -40,8 +37,36 @@ const (
 )
 
 type Client struct {
-	Session uint32
-	Conn    *websocket.Conn
+	Session     uint32
+	Conn        *websocket.Conn
+	Token       string // handshake secret
+	HandshakeId uint32
+	PktIndex    uint32 // server packet index
+}
+
+func (c *Client) Handshake() {
+	c.HandshakeId += 1
+	handshake, _ := json.Marshal(proto.Handshake{
+		Id:       c.HandshakeId,
+		Token:    c.Token,
+		PktIndex: c.PktIndex,
+	})
+
+	err := c.Conn.WriteMessage(websocket.TextMessage, handshake)
+	if err != nil {
+		panic("write: " + err.Error())
+	}
+	// 接收消息
+	c.Conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, message, err := c.Conn.ReadMessage()
+	if err != nil {
+		panic("read: " + err.Error())
+	}
+	if string(message) == "200 OK" {
+		fmt.Println("Handshake: 200 OK")
+	} else {
+		panic("Handshake error: " + string(message))
+	}
 }
 
 func (c *Client) Cleanup() {
@@ -75,6 +100,9 @@ func (c *Client) ReadLoop() {
 		err := c.Conn.ReadJSON(&p)
 		if err != nil {
 			return
+		}
+		if p.Index > c.PktIndex {
+			c.PktIndex = p.Index
 		}
 		fmt.Printf("Received: %+v\n", p)
 	}
@@ -125,33 +153,12 @@ func connectGameServer(token string) *Client {
 	if err != nil {
 		panic("dial: " + err.Error())
 	}
-	// defer conn.Close()
-
-	handshake, _ := json.Marshal(Authorization{
+	client := &Client{
+		Conn:  conn,
 		Token: token,
-	})
-
-	// 发送 handshake
-	err = conn.WriteMessage(websocket.TextMessage, handshake)
-	if err != nil {
-		panic("write: " + err.Error())
 	}
-
-	// 接收消息
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	_, message, err := conn.ReadMessage()
-	if err != nil {
-		panic("read: " + err.Error())
-	}
-	if string(message) == "200 OK" {
-		fmt.Println("Handshake: 200 OK")
-		return &Client{
-			Session: 0,
-			Conn:    conn,
-		}
-	} else {
-		panic("Handshake error: " + string(message))
-	}
+	client.Handshake()
+	return client
 }
 
 func jsonPost[T any](url string, data any) T {

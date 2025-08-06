@@ -12,7 +12,7 @@ type App struct {
 	World  *flying.World
 	Gates  []Gate
 	events chan any
-	verify func(app *App, peer Peer, msg []byte) (Session, error)
+	verify func(app *App, peer Peer, msg []byte) (Session, []byte)
 }
 
 type GateEventConnect struct {
@@ -28,7 +28,7 @@ type GateEventMessage struct {
 	Msg  []byte
 }
 
-func NewApp(verify func(app *App, peer Peer, msg []byte) (Session, error)) *App {
+func NewApp(verify func(app *App, peer Peer, msg []byte) (Session, []byte)) *App {
 	app := &App{
 		World:  flying.NewWorld(),
 		Gates:  make([]Gate, 0),
@@ -46,12 +46,12 @@ func (app *App) handlePeerMessage(peer Peer, msg []byte) {
 	if session := peer.IsVerified(); session != nil {
 		app.World.FireClientRequest(session.Agent(), session, "Request", msg)
 	} else {
-		if session, err := app.verify(app, peer, msg); err == nil {
+		if session, response := app.verify(app, peer, msg); session != nil {
 			peer.Verified(session)
-			peer.Write([]byte("200 OK"))
+			peer.Write(response)
 		} else {
-			Sugar.Errorf("Verify error: %s\n", err.Error())
-			peer.Write([]byte(err.Error()))
+			Sugar.Errorf("Verify error: %s\n", response)
+			peer.Write(response)
 			peer.Close()
 		}
 	}
