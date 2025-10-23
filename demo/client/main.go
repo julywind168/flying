@@ -1,4 +1,4 @@
-package client
+package main
 
 import (
 	"bytes"
@@ -177,4 +177,8 @@ func jsonPost[T any](url string, data any) T {
 	var result T
 	json.Unmarshal(body, &result)
 	return result
+}
+
+func main() {
+	Start()
 }

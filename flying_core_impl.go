@@ -55,7 +55,7 @@ func New(opts ...Option) *Scheduler {
 
 func (s *Scheduler) Start() {
 	if s.logger != nil {
-		s.logger.Infof("flying started\n")
+		s.logger.Infof("flying started")
 	}
 }
 

@@ -59,7 +59,7 @@ func (app *App) Logout(session Session) {
 }
 
 func (app *App) handlePeerConnect(peer Peer) {
-	app.logger.Infof("Connected from %s\n", peer.Address())
+	app.logger.Infof("Connected from %s", peer.Address())
 }
 
 func (app *App) handleClientRequest(session Session, packet *Packet) {
@@ -117,7 +117,7 @@ func (app *App) handlePeerMessage(peer Peer, msg []byte) {
 			peer.Verified(session)
 			peer.Write(response)
 		} else {
-			app.logger.Errorf("Verify error: %s\n", response)
+			app.logger.Errorf("Verify error: %s", response)
 			peer.Write(response)
 			peer.Close()
 		}
@@ -125,7 +125,7 @@ func (app *App) handlePeerMessage(peer Peer, msg []byte) {
 }
 
 func (app *App) handlePeerDisconnect(peer Peer) {
-	app.logger.Infof("Disconnect from %s\n", peer.Address())
+	app.logger.Infof("Disconnect from %s", peer.Address())
 }
 
 func (app *App) OnConnect(peer Peer) {

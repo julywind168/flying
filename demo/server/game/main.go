@@ -6,7 +6,7 @@ import (
 	"github.com/julywind168/flying/berry"
 	"github.com/julywind168/flying/demo/common/logger"
 	"github.com/julywind168/flying/demo/common/proto"
-	"github.com/julywind168/flying/demo/servers/game/gate"
+	"github.com/julywind168/flying/demo/server/game/gate"
 )
 
 type Agent struct {

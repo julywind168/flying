@@ -155,7 +155,7 @@ func (s *BaseSession) Response(result any) {
 		}, false)
 		s.packet = nil
 	} else {
-		s.logger.Errorf("Session.Response: you maybe already responded\n")
+		s.logger.Errorf("Session.Response: you maybe already responded")
 	}
 }
 
