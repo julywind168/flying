@@ -25,12 +25,12 @@ type EntityCarrier interface {
 }
 
 type EntityLifecycle interface {
-	OnInit(ctx Context)
-	OnExit(ctx Context)
+	Init(ctx Context)
+	Exit(ctx Context)
 }
 
 type EntityObserver interface {
-	OnEntityRemoved(ctx Context, observedID string)
+	HandleEntityRemoved(ctx Context, observedID string)
 }
 
 type EventSubscriber interface {

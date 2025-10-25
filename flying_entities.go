@@ -28,7 +28,7 @@ func (s *Scheduler) RegisterEntity(e Entity) error {
 			EntityID: e.ID(),
 			Type:     "internal:entity-init",
 			Handler: func(ctx Context, entity Entity) error {
-				lc.OnInit(ctx)
+				lc.Init(ctx)
 				return nil
 			},
 		}
@@ -70,7 +70,7 @@ func (s *Scheduler) UnregisterEntity(entityID string) error {
 			EntityID: entityID,
 			Type:     "internal:entity-exit",
 			Handler: func(ctx Context, entity Entity) error {
-				lc.OnExit(ctx)
+				lc.Exit(ctx)
 				clearup()
 				return nil
 			},
@@ -137,7 +137,7 @@ func (s *Scheduler) notifyObserversByEvent(observedID string) {
 			Type:     "internal:entity-removed",
 			Handler: func(ctx Context, e Entity) error {
 				if ob, ok := e.(EntityObserver); ok {
-					ob.OnEntityRemoved(ctx, observedID)
+					ob.HandleEntityRemoved(ctx, observedID)
 				}
 				return nil
 			},
